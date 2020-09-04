@@ -2,8 +2,11 @@
 % LRCM MIN with the weighted Hadamard objective function find the nearest
 % low-rank correlation matrix to a given input.
 % See `weighted distance min` folder for example function and derivatives.
-function optimal_matrix = lrcm_wrapper(weights,cost,d)
-    global FParameters;
-    FParameters.C = cost
-    FParameters.W = weights
-    [minimum,optimal_matrix] = lrcm_min(guess(cost,d))
+function Fopt = lrcm_wrapper()
+%    [minimum,optimal_matrix] = lrcm_min(initial_guess)
+load('ml_tmp.mat');
+global FParameters;
+FParameters.C = C;
+FParameters.W = W;
+[Fopt,optimal_matrix] = lrcm_min(Y0);
+save('py_tmp.mat','optimal_matrix');
