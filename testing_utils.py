@@ -5,8 +5,7 @@ import numpy as np
 # from scipy.sparse import csr_matrix
 # from scipy.sparse.csgraph import floyd_warshall
 
-# This will only work in the folder containing dreimac:
-from projectivecoords import ppca
+import ppca
 
 
 def circle_RPn(dimn=4,segment_points=100,num_segments=2):
