@@ -7,50 +7,6 @@ from scipy.sparse.csgraph import floyd_warshall
 # This will only work in the folder containing dreimac.
 # from dreimac.projectivecoords import ppca
 
-def circle_RPn(n=4,num_points=100,kinks=2)
-    """Construct points on a "kinked" circle in RP^n.
-
-    """
-
-    theta_size = np.floor(num_points/kinks)
-    if theta_size*kinks != num_points:
-        print('Warning: data will have ' + str(theta_size*kinks) +
-            ' points, not' + str(num_points))
-    theta = np.linspace(0,np.pi/2,num_points/kinks)
-    X = zeros((num_points,n+1))
-    for i in range(0:kinks):
-        X[i:theta_size+i,i:i+1] = [np.cos(theta),np.sin(theta)]
-    return X
-    
-
-def initial_guess(data,dim):
-    """Compute an initial guess for lrcm_min using projective pca."""
-    # Get projective coordinates in reduced dimension.
-    proj = ProjectiveCoords(
-        data,
-        n_landmarks = 100
-    )
-    res = proj.get_coordinates(proj_dim = dim, perc=0.9)
-    Y = res['X']
-#   Y = np.nan_to_num(Y)    # Apparently possible to have some values slightly out of range.
-    # Get an appropriate cholesky matrix to start lrcm_min.
-    YY = Y@Y.transpose()
-    YYd = YY[0:dim,0:dim]
-    print(np.linalg.matrix_rank(YYd))
-    R = np.linalg.cholesky(YYd) # Only compute cholesky of the upper corner.
-    Q = np.linalg.solve(YYd,Rd)
-    Y = Y@Q
-    return Y
-
-def sphere_toy(num_points,dim,embedding_dim):
-    """Get some points on the sphere of dimension dim and map up to
-    sphere of dimension embedding_dim."""
-    X = np.random.rand(num_points,dim)
-    S = (X.transpose()/np.linalg.norm(X,axis=1)).transpose()
-    S_high = np.zeros((num_points,embedding_dim))
-    S_high[:,0:dim] = S     # About as trivial an embedding as possible.
-    return S_high
-
 # dim = 8
 num_points = 10
 goal_dim = 2
@@ -67,7 +23,6 @@ bad_vals = M > 0.999999
 M[bad_vals] = 0.999999
 D = np.arccos(M)    # Initial distance matrix
 # Select neighborhoods using a radius (alt use k-NN)
-epsilon = 1.0
 A = D<epsilon
 G = csr_matrix(D*A)                         # Matrix representation of graph
 Dg = floyd_warshall(G,directed=False)       # Path-length distance matrix

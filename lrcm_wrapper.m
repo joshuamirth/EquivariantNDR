@@ -8,5 +8,5 @@ load('ml_tmp.mat');
 global FParameters;
 FParameters.C = C;
 FParameters.W = W;
-[Fopt,optimal_matrix] = lrcm_min(Y0);
-save('py_tmp.mat','optimal_matrix');
+[Fopt,optimal_matrix] = lrcm_min(Y0,'quiet');
+save('py_tmp.mat','Fopt','optimal_matrix');
