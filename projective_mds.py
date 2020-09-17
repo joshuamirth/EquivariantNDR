@@ -163,7 +163,7 @@ def pmds(data,goal_dim,epsilon=1.0,max_iter=20,verbose=True):
     Y = initial_guess(data,goal_dim)
     S = np.sign(Y@Y.transpose())
     C = S*np.cos(Dhat)
-    cost_old = np.inf 
+    cost = []
     for i in range(0,max_iter):
         # Actual algorithmic loop:
         workspace = lrcm_wrapper(C,W,Y)
@@ -171,32 +171,33 @@ def pmds(data,goal_dim,epsilon=1.0,max_iter=20,verbose=True):
         Y_new = workspace['optimal_matrix']
         S_new = np.sign(Y_new@Y_new.transpose())
         Fopt = workspace['Fopt']
-        cost_new = 0.5*LA.norm(W*(Y_new@Y_new.transpose()) - W*C)**2
+        cost.append(Fopt)
         C_new = S_new*np.cos(Dhat)
         cost_newS = 0.5*LA.norm(W*(Y_new@Y_new.transpose()) - W*C_new)**2 
         S_diff = 25*((LA.norm(S_new - S))**2)
         percent_S_diff = S_diff/(num_points**2)
-        percent_cost_diff = 100*(cost_new - cost_old)/cost_old
+        if i > 0:
+            percent_cost_diff = 100*(cost[i-1] - cost[i])/cost[i-1]
+        else:
+            percent_cost_diff = 100
         # Do an SVD to get the correlation matrix on the sphere.
         # Y,s,vh = LA.svd(out_matrix,full_matrices=False)
         if verbose:
             print('Through %i iterations:' %(i+1))
-            print('\tComputed cost: %i' %(int(cost_new)))
+            print('\tComputed cost: %i' %(int(cost[i])))
             print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
             print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
             print('\tComputed cost with new S: %i' %(int(cost_newS)))
-            print('\tFopt (should match computed cost): %i' %(int(Fopt)))
         if S_diff < 1:
             print('No change in S matrix. Stopping iterations.')
             break
-        if percent_cost_diff > -.0001:
+        if percent_cost_diff < .0001:
             print('No significant cost improvement. Stopping iterations.')
             break
         # Update variables:
         Y = Y_new
         C = C_new
-        cost_old = cost_new
-    return Y
+    return Y, cost
 
 def lrcm_wrapper(C,W,Y0):
 #   print('Starting MATLAB ==================================================')
