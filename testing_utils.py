@@ -11,16 +11,21 @@ import matplotlib.pyplot as plt
 try:
     from dreimac.projectivecoords import ppca
 except:
-    import ppca
+    from ppca import ppca
     print("""Loading personal version of PPCA. This may not be consistent with
         the published version""")
 
-def circleRPn(dimn=4,segment_points=50,num_segments=2):
+def circleRPn(dimn=4,segment_points=50,num_segments=4):
     """Construct points on a "kinked" circle in RP^d.
 
     Constructs a curve of evenly-spaced points along the great circle
     from e_i to e_{i+1} in R^{d+1}, starting at e_0 and finishing at
     e_i with i = num_segments, then returns to -e_0.
+
+    It is recommended that dimn==num_segments, otherwise the resulting
+    data matrix will not be full rank, which can cause issues later.
+    Similarly, the output data is randomly permuted so that the first n
+    points are not on the same linear subspace, generically.
 
     Parameters
     ----------
@@ -35,11 +40,20 @@ def circleRPn(dimn=4,segment_points=50,num_segments=2):
     -------
     X : ndarray
         Array of coordinate values in R^{d+1}.
+    num_points : int
+        Number of points in data set.
     """
-    
+    if int(num_segments) != num_segments:
+        raise ValueError("""Number of segments must be a positive integer.
+            Supplied value was %2.2f.""" %num_segments)
+    if num_segments < 1 or dimn < 1:
+        raise ValueError("""Number of segments and dimension must be positive
+            integers. Supplied values were num_segments = %2.2f and dimension
+            = %2.2f""" %(num_segments,dimn))    
     if dimn < num_segments:
-        raise ValueError('Dimension ' + str(dimn) + ' does not have enough ' +
-            'dimensions for ' + str(num_segments) + ' segments.')
+        raise ValueError("""Value of dimension must be larger than number of
+            segments. Supplied dimension was %i and number of segments was
+            %i""" %(dimn,num_segments))
     num_points = segment_points*(num_segments+1)
     theta = np.linspace(0,np.pi/2,segment_points,endpoint=False)
     X = np.zeros((num_points,dimn+1))
@@ -48,23 +62,65 @@ def circleRPn(dimn=4,segment_points=50,num_segments=2):
         X[i*segment_points:(i+1)*segment_points,i:i+2] = segment_curve
     X[num_segments*segment_points:num_points,0] = -np.sin(theta)
     X[num_segments*segment_points:num_points,num_segments] = np.cos(theta)
-    return X
+    X = np.random.permutation(X)
+    return X, num_points
 
 def initial_guess(data,dim):
-    """Use PPCA and Cholesky factor to get an initial input for lrcm_min"""
-    # Get projective coordinates in reduced dimension.
-    V = ppca.ppca(data, dim)
+    """Use PPCA and Cholesky factor to get an initial input for lrcm_min
+
+    Parameters
+    ----------
+    data : ndarray
+        Input data as n*d matrix
+    dim : int
+        Dimension (of projective space) on which to place an initial
+        guess. Must be less than the dimension of the original data.
+
+    Returns
+    -------
+    X : ndarray
+        Data on the Cholesky manifold.
+    
+    Notes
+    -----
+    The Cholesky manifold is defined in Grubisic and Pietersz.
+    
+    """
+    
+    # TODO: consider other ways of getting an initial low-rank guess,
+    # e.g. iteratively doing ppca, or another method.
+    V = ppca(data, dim)
     X = V['X']
-#   X = np.nan_to_num(X)    # Apparently possible to have some values slightly out of range.
-    # Get an appropriate cholesky matrix to start lrcm_min.
-    XX = X@X.transpose()
-    XXd = XX[0:dim+1,0:dim+1]
-    R = LA.cholesky(XXd) # Only compute cholesky of the upper corner.
-    Q = LA.solve(XXd,R)
-    X = X@Q
+    X = choleseky_rep(X)
     return X
 
-def pmds(data,goal_dim,epsilon=1.0,num_iter=20,verbose=True):
+def choleseky_rep(X):
+    """Find a rotation of X which is on the Cholesky manifold.
+
+    Parameters
+    ----------
+    X : ndarray
+        Array of data as an n*d matrix.
+
+    Returns
+    -------
+    Cx : ndarray
+        Rotation of the data which lives on the Cholesky manifold.
+
+    """
+
+    d = X.shape[1]
+    Xd = X[0:d,0:d]
+    if LA.matrix_rank(Xd) < d:
+        raise LA.LinAlgError("""Input data not generic. If computing
+            using circleRPn, check that dimn==num_segments.""")
+    # Get an appropriate cholesky matrix to start lrcm_min.
+    L = LA.cholesky(Xd@Xd.transpose())
+    Q = LA.solve(Xd,L)
+    Cx = np.tril(X@Q)    # The matrix is lower-triangular, but apply tril
+    return Cx            # to handle floating-point errors.
+
+def pmds(data,goal_dim,epsilon=1.0,max_iter=20,verbose=True):
     """Projective multi-dimensional scaling algorithm.
 
     Detailed description in career grant, pages 6-7 (method 1).
@@ -77,7 +133,7 @@ def pmds(data,goal_dim,epsilon=1.0,num_iter=20,verbose=True):
         Output data will lie on RP^d with d = goal_dim.
     epsilon : float, optional
         Radius of neighborhood when constructing graph.
-    num_iter : int, optional
+    max_iter : int, optional
         Number of times to iterate the loop. Will eventually be updated
         to a better convergence criterion.
 
@@ -93,49 +149,53 @@ def pmds(data,goal_dim,epsilon=1.0,num_iter=20,verbose=True):
     M[bad_vals] = 0.999999
     D = np.arccos(M)    # Initial distance matrix
     A = D<epsilon
-    G = csr_matrix(D*A)                         # Matrix representation of graph
-    Dg = floyd_warshall(G,directed=False)       # Path-length distance matrix
+    G = csr_matrix(D*A)                        # Matrix representation of graph
+    Dg = floyd_warshall(G,directed=False)      # Path-length distance matrix
     # Check that the graph is actually connected (otherwise there are infinite
     # values in the distance matrix).
     if np.isinf(np.max(Dg)):
         print("""Try a bigger value of epsilon - the distance matrix is not
             connected.""")
-    Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize so distances are reasonable.
-    W_inv = (1 - np.cos(Dhat)**2)       # Pointwise inverse of weight matrix.
-    W = (W_inv+np.eye(num_points))**-1 - np.eye(num_points) # Put zeros on the diagonal w/o dividing by zero.
-    # TODO: make this a loop, and not just a one-time iteration.
+    Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
+    # Put zeros on the diagonal of W w/o dividing by zero.
+    W_inv = (1 - np.cos(Dhat)**2)     
+    W = np.sqrt((W_inv+np.eye(num_points))**-1 - np.eye(num_points))
     Y = initial_guess(data,goal_dim)
-    cost_list = []
-    old_cost = np.inf 
-    for i in range(0,num_iter):
-        S = np.sign(Y@Y.transpose())
-        C = S*np.cos(Dhat)  # Cost matrix, in terminology of G&P.
+    S = np.sign(Y@Y.transpose())
+    C = S*np.cos(Dhat)
+    cost_old = np.inf 
+    for i in range(0,max_iter):
+        # Actual algorithmic loop:
         workspace = lrcm_wrapper(C,W,Y)
-        #print('Cost at this iteration: ' + str(cost))
-        out_matrix = workspace['optimal_matrix']
+        # Updated information:
+        Y_new = workspace['optimal_matrix']
+        S_new = np.sign(Y_new@Y_new.transpose())
         Fopt = workspace['Fopt']
+        cost_new = 0.5*LA.norm(W*(Y_new@Y_new.transpose()) - W*C)**2
+        C_new = S_new*np.cos(Dhat)
+        cost_newS = 0.5*LA.norm(W*(Y_new@Y_new.transpose()) - W*C_new)**2 
+        S_diff = 25*((LA.norm(S_new - S))**2)
+        percent_S_diff = S_diff/(num_points**2)
+        percent_cost_diff = 100*(cost_new - cost_old)/cost_old
         # Do an SVD to get the correlation matrix on the sphere.
-        Y,s,vh = LA.svd(out_matrix,full_matrices=False)
-        Sn = np.sign(Y@Y.transpose())
-        Sdiff = 25*((LA.norm(Sn - S))**2)/(num_points**2)
-        cost = LA.norm(np.sqrt(W)*(Y@Y.transpose()) - np.sqrt(W)*C)**2
-        new_s_cost = LA.norm(np.sqrt(W)*(Y@Y.transpose()) -
-            np.sqrt(W)*Sn*np.cos(Dhat))**2 
-        percent_cost_diff = 100*(cost - old_cost)/cost
+        # Y,s,vh = LA.svd(out_matrix,full_matrices=False)
         if verbose:
             print('Through %i iterations:' %(i+1))
-            print('\tComputed cost: %i' %(int(cost)))
-            print('\tComputed cost with new S: %i' %(int(new_s_cost)))
+            print('\tComputed cost: %i' %(int(cost_new)))
             print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
-            print('\tPercent Difference in S: % 2.2f' %Sdiff)
-            print('\tFopt (I don\'t know what this means): %i' %(int(Fopt)))
-        if Sdiff < 1:
+            print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
+            print('\tComputed cost with new S: %i' %(int(cost_newS)))
+            print('\tFopt (should match computed cost): %i' %(int(Fopt)))
+        if S_diff < 1:
             print('No change in S matrix. Stopping iterations.')
             break
         if percent_cost_diff > -.0001:
             print('No significant cost improvement. Stopping iterations.')
             break
-        old_cost = cost
+        # Update variables:
+        Y = Y_new
+        C = C_new
+        cost_old = cost_new
     return Y
 
 def lrcm_wrapper(C,W,Y0):
