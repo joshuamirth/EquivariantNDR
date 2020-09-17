@@ -64,7 +64,7 @@ def initial_guess(data,dim):
     X = X@Q
     return X
 
-def pmds(data,goal_dim,epsilon=1.0):
+def pmds(data,goal_dim,epsilon=1.0,num_iter=20,verbose=True):
     """Projective multi-dimensional scaling algorithm.
 
     Detailed description in career grant, pages 6-7 (method 1).
@@ -75,6 +75,11 @@ def pmds(data,goal_dim,epsilon=1.0):
         Data as an n*2 matrix, assumed to lie on RP^n (i.e. S^n).
     goal_dim : int
         Output data will lie on RP^d with d = goal_dim.
+    epsilon : float, optional
+        Radius of neighborhood when constructing graph.
+    num_iter : int, optional
+        Number of times to iterate the loop. Will eventually be updated
+        to a better convergence criterion.
 
     Returns
     -------
@@ -101,19 +106,36 @@ def pmds(data,goal_dim,epsilon=1.0):
     # TODO: make this a loop, and not just a one-time iteration.
     Y = initial_guess(data,goal_dim)
     cost_list = []
-    for i in range(0,20):
+    old_cost = np.inf 
+    for i in range(0,num_iter):
         S = np.sign(Y@Y.transpose())
         C = S*np.cos(Dhat)  # Cost matrix, in terminology of G&P.
         workspace = lrcm_wrapper(C,W,Y)
-        cost = workspace['Fopt']
-        cost_list.append(cost)  # Return this list of costs for analysis.
-        print('Cost at this iteration: ' + str(cost))
+        #print('Cost at this iteration: ' + str(cost))
         out_matrix = workspace['optimal_matrix']
+        Fopt = workspace['Fopt']
         # Do an SVD to get the correlation matrix on the sphere.
         Y,s,vh = LA.svd(out_matrix,full_matrices=False)
-        print('Got through ' + str(i+1) + ' iterations.')
         Sn = np.sign(Y@Y.transpose())
-        print('Difference in S: ' + str(int(((np.linalg.norm(Sn - S))**2)/8)))
+        Sdiff = 25*((LA.norm(Sn - S))**2)/(num_points**2)
+        cost = LA.norm(np.sqrt(W)*(Y@Y.transpose()) - np.sqrt(W)*C)**2
+        new_s_cost = LA.norm(np.sqrt(W)*(Y@Y.transpose()) -
+            np.sqrt(W)*Sn*np.cos(Dhat))**2 
+        percent_cost_diff = 100*(cost - old_cost)/cost
+        if verbose:
+            print('Through %i iterations:' %(i+1))
+            print('\tComputed cost: %i' %(int(cost)))
+            print('\tComputed cost with new S: %i' %(int(new_s_cost)))
+            print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
+            print('\tPercent Difference in S: % 2.2f' %Sdiff)
+            print('\tFopt (I don\'t know what this means): %i' %(int(Fopt)))
+        if Sdiff < 1:
+            print('No change in S matrix. Stopping iterations.')
+            break
+        if percent_cost_diff > -.0001:
+            print('No significant cost improvement. Stopping iterations.')
+            break
+        old_cost = cost
     return Y
 
 def lrcm_wrapper(C,W,Y0):
