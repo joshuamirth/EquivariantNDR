@@ -1,4 +1,4 @@
-# Hacked together script to do dim reduction on RPn
+""" Dim reduction on RPn using an MDS-type method. """
 import matlab.engine    # for LRCM MIN.
 import numpy as np
 import numpy.linalg as LA
