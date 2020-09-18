@@ -91,6 +91,10 @@ def initial_guess(data,dim):
     # e.g. iteratively doing ppca, or another method.
     V = ppca(data, dim)
     X = V['X']
+    # Testing out a completely random initial condition.
+#   X = 2*np.random.random_sample((dim+1,data.shape[0]))-1
+#   X = X/LA.norm(X,axis=0)
+#   X = X.transpose()
     X = choleseky_rep(X)
     return X
 
@@ -161,6 +165,7 @@ def pmds(data,goal_dim,epsilon=1.0,max_iter=20,verbose=True):
     W_inv = (1 - np.cos(Dhat)**2)     
     W = np.sqrt((W_inv+np.eye(num_points))**-1 - np.eye(num_points))
     Y = initial_guess(data,goal_dim)
+    Y_prev = Y
     S = np.sign(Y@Y.transpose())
     C = S*np.cos(Dhat)
     cost = []
@@ -174,12 +179,14 @@ def pmds(data,goal_dim,epsilon=1.0,max_iter=20,verbose=True):
         cost.append(Fopt)
         C_new = S_new*np.cos(Dhat)
         cost_newS = 0.5*LA.norm(W*(Y_new@Y_new.transpose()) - W*C_new)**2 
-        S_diff = 25*((LA.norm(S_new - S))**2)
-        percent_S_diff = S_diff/(num_points**2)
+        S_diff = ((LA.norm(S_new - S))**2)/4
+        percent_S_diff = 100*S_diff/S_new.size
         if i > 0:
             percent_cost_diff = 100*(cost[i-1] - cost[i])/cost[i-1]
         else:
             percent_cost_diff = 100
+        # (This is not actually necessary - not doing so gives us "mean
+        # centered" data.)
         # Do an SVD to get the correlation matrix on the sphere.
         # Y,s,vh = LA.svd(out_matrix,full_matrices=False)
         if verbose:
@@ -188,6 +195,9 @@ def pmds(data,goal_dim,epsilon=1.0,max_iter=20,verbose=True):
             print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
             print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
             print('\tComputed cost with new S: %i' %(int(cost_newS)))
+            print('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)))
+            print('\tPercent of orthogonal elements: %2.2f' %ortho_ips)
+            print('\tPercent of negligible cost terms: %2.2f' %neg_cost)
         if S_diff < 1:
             print('No change in S matrix. Stopping iterations.')
             break
@@ -195,9 +205,11 @@ def pmds(data,goal_dim,epsilon=1.0,max_iter=20,verbose=True):
             print('No significant cost improvement. Stopping iterations.')
             break
         # Update variables:
+        Y_prev = Y
         Y = Y_new
         C = C_new
-    return Y, cost
+        S = S_new
+    return Y, cost, Y_prev
 
 def lrcm_wrapper(C,W,Y0):
 #   print('Starting MATLAB ==================================================')
