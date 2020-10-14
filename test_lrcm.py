@@ -1,27 +1,58 @@
+import projective_mds
+import matplotlib.pyplot as plt
 import numpy as np
-import scipy.io
-import matlab.engine
+
+def test1():
+    T,n = projective_mds.circleRPn()
+    D = projective_mds.graph_distance_matrix(T,k=5)
+    Y = projective_mds.initial_guess(T,2)
+    X,C = projective_mds.pmds(Y,D,weighted=False)
+    fig1 = projective_mds.plot_RP2(X)
+    X,C = projective_mds.pmds(Y,D,weighted=True)
+    fig2 = projective_mds.plot_RP2(X)
+    X,C = projective_mds.pmds(Y,D,solve_prog='autograd',appx='taylor')
+    fig3 = projective_mds.plot_RP2(X)
+    X,C = projective_mds.pmds(Y,D,solve_prog='autograd',appx='rational')
+    fig4 = projective_mds.plot_RP2(X)
+    plt.show()
+
+def test2():
+    T,n = projective_mds.circleRPn(noise=True)
+    D = projective_mds.graph_distance_matrix(T,k=8)
+    Y = projective_mds.initial_guess(T,2)
+    X,C,T1 = projective_mds.pmds(Y,D,weighted=False)
+    fig1 = projective_mds.plot_RP2(X)
+    X,C,T2 = projective_mds.pmds(Y,D,weighted=True)
+    fig2 = projective_mds.plot_RP2(X)
+    X,C,T3 = projective_mds.pmds(Y,D,solve_prog='autograd',appx='taylor')
+    fig3 = projective_mds.plot_RP2(X)
+    X,C,T4 = projective_mds.pmds(Y,D,solve_prog='autograd',appx='rational')
+    fig4 = projective_mds.plot_RP2(X)
+    X,C,T5 = projective_mds.pmds(Y,D,solve_prog='autograd',appx='frobenius')
+    fig5 = projective_mds.plot_RP2(X)
+    plt.show()
+    return T1[-1],T2[-1],T3[-1],T4[-1],T5[-1]
 
 # Example from Grubisic & Pietersz, "Rank Reduction Correlation Matrices", p2.
 # Target matrix of high rank:
-C = np.array([[1.0000,0.6124,0.6124],[0.6124,1.0000,0.8333],[0.6124,0.8333,1.0000]])
+#C = np.array([[1.0000,0.6124,0.6124],[0.6124,1.0000,0.8333],[0.6124,0.8333,1.0000]])
 # Initial guess:
-Y0 = np.array([[1.0000,0],[0.7112,0.7030],[0.6605,0.7508]])
+#Y0 = np.array([[1.0000,0],[0.7112,0.7030],[0.6605,0.7508]])
 # Weight matrix:
-W = np.ones((3,3))
+#W = np.ones((3,3))
 # Known solution from paper:
-Yn = np.array([[1.0000,0],[0.6124,0.7906],[0.6124,0.7906]])
+#Yn = np.array([[1.0000,0],[0.6124,0.7906],[0.6124,0.7906]])
 # Goal rank
-d = 2
+#d = 2
 # Save to .mat as a crude way to pass to matlab.
-scipy.io.savemat('ml_tmp.mat', dict(C=C,W=W,Y0=Y0,d=d))
+#scipy.io.savemat('ml_tmp.mat', dict(C=C,W=W,Y0=Y0,d=d))
 # Run lrcm_min in matlab.
-print('Starting MATLAB %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
-eng = matlab.engine.start_matlab()
-t = eng.lrcm_wrapper()
-print('MATLAB complete %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+#print('Starting MATLAB %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+#eng = matlab.engine.start_matlab()
+#t = eng.lrcm_wrapper()
+#print('MATLAB complete %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
 # Load result from matlab.
-workspace = scipy.io.loadmat('py_tmp.mat')
-out_matrix = workspace['optimal_matrix']
-test = np.linalg.norm(out_matrix - Yn)
-print('Difference from known result: ' + str(test))
+#workspace = scipy.io.loadmat('py_tmp.mat')
+#out_matrix = workspace['optimal_matrix']
+#test = np.linalg.norm(out_matrix - Yn)
+#print('Difference from known result: ' + str(test))

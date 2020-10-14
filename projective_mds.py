@@ -1,10 +1,11 @@
 """ Dim reduction on RPn using an MDS-type method. """
 import matlab.engine    # for LRCM MIN.
-import numpy as np
-import numpy.linalg as LA
+import autograd.numpy as np
+import autograd.numpy.linalg as LA
 import scipy.io as io
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
+from scipy.special import comb  # n Choose k
 import matplotlib.pyplot as plt
 # Setup for pymanopt.
 import pymanopt
@@ -12,6 +13,7 @@ from pymanopt.manifolds import Oblique
 from pymanopt.solvers import TrustRegions
 from pymanopt.solvers import ConjugateGradient
 import os
+import random 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 # dreimac does not install properly on my system.
@@ -77,6 +79,7 @@ def circleRPn(
         raise ValueError("""Value of dimension must be larger than number of
             segments. Supplied dimension was %i and number of segments was
             %i""" %(dim,num_segments))
+    rng = np.random.default_rng(57)
     num_points = segment_points*(num_segments+1)
     theta = np.linspace(0,np.pi/2,segment_points,endpoint=False)
     X = np.zeros((num_points,dim+1))
@@ -86,9 +89,9 @@ def circleRPn(
     X[num_segments*segment_points:num_points,0] = -np.sin(theta)
     X[num_segments*segment_points:num_points,num_segments] = np.cos(theta)
     if randomize:
-        X = np.random.permutation(X)
+        X = rng.permutation(X)
     if noise:
-        N = v*np.random.rand(dim+1,num_points)
+        N = v*rng.random((dim+1,num_points))
         Xt = (X.T + N)/LA.norm(X.T+N,axis=0)
         X = Xt.T
     return X, num_points
@@ -206,9 +209,7 @@ def graph_distance_matrix(data,epsilon=0.4,k=-1):
     """
 
     M = np.abs(data@data.T)
-    # Due to rounding errors, M may contain values 1+epsilon. Remove these.
-    bad_vals = M >= 1.0
-    M[bad_vals] = 1.0
+    acos_validate(M)
     D = np.arccos(M)    # Initial distance matrix
     # Use kNN. Sort twice to get nearest neighbour list.
     if k > 0:
@@ -227,7 +228,15 @@ def graph_distance_matrix(data,epsilon=0.4,k=-1):
     Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
     return Dhat
 
-def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt'):
+def acos_validate(M):
+    """Replace values in M outside of domain of acos with +/- 1."""
+    big_vals = M >= 1.0
+    M[big_vals] = 1.0
+    small_vals = M <= -1.0
+    M[small_vals] = -1.0
+    return M
+
+def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0):
     """Projective multi-dimensional scaling algorithm.
 
     Detailed description in career grant, pages 6-7 (method 1).
@@ -245,67 +254,84 @@ def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt'):
     verbose : bool, optional
         If true, print output relating to convergence conditions at each
         iteration.
-    solver : string, optional
+    solve_prog : string, optional
         Choice of algorithm for low-rank correlation matrix reduction.
         Options are "pymanopt" or "matlab", default is "pymanopt".
 
     Returns
     -------
+    Y : ndarray
+        Optimal configuration of points in RP^k.
+    C : list
+        List of costs at each iteration.
 
     """
 
-    # Put zeros on the diagonal of W w/o dividing by zero.
     num_points = Y.shape[0]
     rank = LA.matrix_rank(Y)
     if verbose:
         print('Finding projection onto RP^%i.' %(rank-1))
-    W_inv = (1 - np.cos(D)**2)     
-    W = np.sqrt((W_inv+np.eye(num_points))**-1 - np.eye(num_points))
+    if weighted:
+        W_inv = (1 - np.cos(D)**2)     
+        # Put zeros on the diagonal of W w/o dividing by zero.
+        W = np.sqrt((W_inv+np.eye(num_points))**-1 - np.eye(num_points))
+    else:
+        W = np.ones((num_points,num_points))
     S = np.sign(Y@Y.T)
     if np.sum(S == 0) > 0:
         print('Warning: Some initial guess vectors are orthogonal, this may ' +
             'cause issues with convergence.')
     C = S*np.cos(D)
     cost_list = [0.5*LA.norm(W*(Y@Y.T) - W*C)**2]
+    true_cost_list = [0.5*LA.norm(D - np.arccos(acos_validate(np.abs(Y@Y.T))))**2]
     if np.min(W) < 0 or np.min(np.cos(D)) < 0:
         raise ValueError('Something is horribly wrong.')
-    if solve_prog == 'pymanopt':
+    if solve_prog == 'pymanopt' or solve_prog == 'autograd':
         manifold = Oblique(rank,num_points) # Short, wide matrices.
         solver = ConjugateGradient()
     for i in range(0,max_iter):
         if solve_prog == 'matlab':
-            # Actual algorithmic loop:
+            cost, egrad, ehess = setup_cost(C,W)
             workspace = lrcm_wrapper(C,W,Y)
             Y_new = workspace['optimal_matrix']
         elif solve_prog == 'pymanopt':
-            # Actual algorithmic loop:
             cost, egrad, ehess = setup_cost(C,W)
-            problem = pymanopt.Problem(manifold, cost, egrad=egrad)
+            problem = pymanopt.Problem(manifold, cost, egrad=egrad, verbosity=verbose)
             Y_new = solver.solve(problem,x=Y.T)
             Y_new = Y_new.T
-        cost_oldS = 0.5*LA.norm(W*(Y_new@Y_new.T) - W*C)**2 
+        elif solve_prog == 'autograd':
+            cost = setup_ag_cost(S,D,appx)
+            problem = pymanopt.Problem(manifold, cost, verbosity=verbose)
+            Y_new = solver.solve(problem,x=Y.T)
+            Y_new = Y_new.T
+        cost_oldS = cost(Y_new.T)
+#        cost_oldS = 0.5*LA.norm(W*(Y_new@Y_new.T) - W*C)**2 
         cost_list.append(cost_oldS)
         S_new = np.sign(Y_new@Y_new.T)
         C_new = S_new*np.cos(D)
-        cost_newS = 0.5*LA.norm(W*(Y_new@Y_new.T) - W*C_new)**2 
+        if solve_prog == 'matlab' or solve_prog == 'pymanopt':
+            cost_new,_,_ = setup_cost(C_new,W)
+        elif solve_prog == 'autograd':
+            cost_new = setup_ag_cost(S_new,D,appx)
+        cost_newS = cost_new(Y_new.T)
+#       cost_newS = 0.5*LA.norm(W*(Y_new@Y_new.T) - W*C_new)**2 
         S_diff = ((LA.norm(S_new - S))**2)/4
         percent_S_diff = 100*S_diff/S_new.size
         percent_cost_diff = 100*(cost_list[i] - cost_list[i+1])/cost_list[i]
-        # (This is not actually necessary - not doing so gives us "mean
-        # centered" data.)
+        true_cost = 0.5*LA.norm(D - np.arccos(acos_validate(np.abs(Y_new@Y_new.T))))**2
+        true_cost_list.append(true_cost)
         # Do an SVD to get the correlation matrix on the sphere.
         # Y,s,vh = LA.svd(out_matrix,full_matrices=False)
         if verbose:
             print('Through %i iterations:' %(i+1))
+            print('\tTrue cost: %2.2f' %true_cost)
             print('\tComputed cost: %2.2f' %cost_list[i+1])
             print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
             print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
             print('\tComputed cost with new S: %2.2f' %cost_newS)
             print('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)))
-#           print('\tPercent of orthogonal elements: %2.2f' %ortho_ips)
-#           print('\tPercent of negligible cost terms: %2.2f' %neg_cost)
         if S_diff < 1:
-            print('No change in S matrix. Stopping iterations.')
+            print('No change in S matrix. Stopping iterations')
             break
         if percent_cost_diff < .0001:
             print('No significant cost improvement. Stopping iterations.')
@@ -314,9 +340,9 @@ def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt'):
         Y = Y_new
         C = C_new
         S = S_new
-    return Y, cost_list
+    return Y, cost_list, true_cost_list
 
-def plot_RP2(X,pullback=True):
+def plot_RP2(X,pullback=True,compare=False,Z=[]):
     """Plot data reduced onto RP2"""
 
     fig = plt.figure()
@@ -325,7 +351,9 @@ def plot_RP2(X,pullback=True):
     if pullback:
         Y = -X
         ax.scatter(Y[:,0],Y[:,1],Y[:,2])
-    plt.show()
+    if compare:
+        ax.scatter(Z[:,0],Z[:,1],Z[:,2])
+    return fig
 
 def lrcm_wrapper(C,W,Y0):
     io.savemat('ml_tmp.mat', dict(C=C,W=W,Y0=Y0))
@@ -371,6 +399,35 @@ def setup_cost(C,W):
     
     return F, dF, ddF
 
+def setup_ag_cost(S,D,appx='none'):
+    if appx == 'none':
+        """Direct cost function with no approximations."""
+        def F(Y):
+            return 0.5*np.linalg.norm(np.arccos(S*(Y.T@Y)) - D)**2
+    elif appx == 'taylor':
+        # Taylor-series bases polynomial cost.
+        def F(Y):
+            return 0.5*np.linalg.norm(S*(np.pi/2 - D) - Y.T@Y - .1667*(Y.T@Y)**3)**2
+    elif appx == 'rational':
+        # Rational function approximation.
+        a = -0.939115566365855
+        b =  0.9217841528914573
+        c = -1.2845906244690837
+        d =  0.295624144969963174
+        def F(Y):
+            return 0.5*np.linalg.norm(S*D - S*np.pi/2 - (a*(Y.T@Y) + b*(Y.T@Y)**3)/(1 + c*(Y.T@Y)**2 + d*(Y.T@Y)**4))**2
+    elif appx == 'frobenius':
+        W_inv = (1 - np.cos(D)**2)     
+        W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1 - np.eye(D.shape[0],D.shape[1]))
+        def F(Y):
+            return 0.5*np.linalg.norm(W*(S*np.cos(D)-Y.T@Y))**2
+    return F
+
+def setup_poly_cost(S,D):
+    def F(Y):
+        return 0.5*np.linalg.norm(S*(np.pi/2 - D) - Y.T@Y - .1667*(Y.T@Y)**3)**2
+    return F
+
 def example(dim,k=5,guess='ppca'):
     T,n = circleRPn(dim=dim,num_segments=dim)
     Y0 = initial_guess(T,2,guess_method=guess)
@@ -378,3 +435,47 @@ def example(dim,k=5,guess='ppca'):
     P,C = pmds(Y0,D)
     plot_RP2(P)
     return P,C
+
+def bezier_RPn(ctrl_points,N=100,noise=0):
+    """Define a weird curve for testing purposes.
+    
+    Parameters
+    ----------
+    ctrl_points : ndarray
+        n*d array where each row is a control point of a Bezier curve
+        in R^d. The first row is the start point of the curve, and the
+        last row is the end point.
+    N : int, optional
+        Number of points to put on curve. Default is 1000.
+    
+    Returns
+    -------
+    B : ndarray
+        Array (N*d) with each row a point on the curve. Normalized to
+        lie on the sphere.
+
+    """
+
+    t = np.reshape(np.linspace(0,1,N),(N,1))
+    deg = ctrl_points.shape[0]-1
+    dim = ctrl_points.shape[1]
+    P = np.reshape(ctrl_points[0,:],(1,dim))
+    B = ((1-t)**deg)@P
+    for i in range(1,deg):
+        P = np.reshape(ctrl_points[i,:],(1,dim))
+        B = B + comb(deg,i)*((t**i)*((1-t)**(deg-i)))@P
+    P = np.reshape(ctrl_points[deg,:],(1,dim))
+    B = B + (t**deg)@P
+    if noise > 0 :
+        ns = noise*(np.random.rand(N,dim)-.5)
+        B = B+ns
+    B = (B.T/LA.norm(B,axis=1)).T
+    return B   
+
+def projective_distance_matrix(Y):
+    S = np.sign(Y@Y.T)
+    M = S*(Y@Y.T)
+    acos_validate(M)
+    D = np.arccos(M)    # Initial distance matrix
+    return D
+
