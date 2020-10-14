@@ -342,18 +342,16 @@ def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0
         S = S_new
     return Y, cost_list, true_cost_list
 
-def plot_RP2(X,pullback=True,compare=False,Z=[]):
+def plot_RP2(X,ax,pullback=True,compare=False,Z=[]):
     """Plot data reduced onto RP2"""
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111,projection='3d')
     ax.scatter(X[:,0],X[:,1],X[:,2])
     if pullback:
         Y = -X
         ax.scatter(Y[:,0],Y[:,1],Y[:,2])
     if compare:
         ax.scatter(Z[:,0],Z[:,1],Z[:,2])
-    return fig
+    return ax
 
 def lrcm_wrapper(C,W,Y0):
     io.savemat('ml_tmp.mat', dict(C=C,W=W,Y0=Y0))
@@ -422,19 +420,6 @@ def setup_ag_cost(S,D,appx='none'):
         def F(Y):
             return 0.5*np.linalg.norm(W*(S*np.cos(D)-Y.T@Y))**2
     return F
-
-def setup_poly_cost(S,D):
-    def F(Y):
-        return 0.5*np.linalg.norm(S*(np.pi/2 - D) - Y.T@Y - .1667*(Y.T@Y)**3)**2
-    return F
-
-def example(dim,k=5,guess='ppca'):
-    T,n = circleRPn(dim=dim,num_segments=dim)
-    Y0 = initial_guess(T,2,guess_method=guess)
-    D = graph_distance_matrix(T,k=k)
-    P,C = pmds(Y0,D)
-    plot_RP2(P)
-    return P,C
 
 def bezier_RPn(ctrl_points,N=100,noise=0):
     """Define a weird curve for testing purposes.
