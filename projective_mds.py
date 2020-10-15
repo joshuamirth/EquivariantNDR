@@ -382,16 +382,20 @@ def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0
 # Output and Plotting
 ###############################################################################
 
-def plot_RP2(X,ax,pullback=True,compare=False,Z=[]):
+def plot_RP2(X,axes=None,pullback=True,compare=False,Z=[]):
     """Plot data reduced onto RP2"""
 
-    ax.scatter(X[:,0],X[:,1],X[:,2])
+    if axes == None:
+        fig = plt.figure()
+        axes = fig.add_subplot(111,projection='3d')
+    axes.scatter(X[:,0],X[:,1],X[:,2])
     if pullback:
         Y = -X
-        ax.scatter(Y[:,0],Y[:,1],Y[:,2])
+        axes.scatter(Y[:,0],Y[:,1],Y[:,2])
     if compare:
-        ax.scatter(Z[:,0],Z[:,1],Z[:,2])
-    return ax
+        axes.scatter(Z[:,0],Z[:,1],Z[:,2])
+    plt.suptitle('Plot on RP^2')
+    return axes
 
 ###############################################################################
 # Miscellaneous
