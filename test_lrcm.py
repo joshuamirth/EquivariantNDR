@@ -41,6 +41,13 @@ def test5():
     out = do_tests(Y,D)
     return out
 
+def test6():
+    """Test using the bezier curve on RP^4 (which gets tangled by PPCA)."""
+    B = np.load('bez_test.npy')
+    D = projective_mds.graph_distance_matrix(B,k=5)
+    Y = projective_mds.initial_guess(B,2)
+    out = do_tests(Y,D)
+    return out
 
 def do_tests(Y,D,verbose=0):
     X,C,T1 = projective_mds.pmds(Y,D,weighted=False,verbose=verbose)
