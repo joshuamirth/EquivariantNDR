@@ -33,6 +33,10 @@ except:
 #    D = np.array([np.roll(theta,i) for i in range(0,2*n)])
 #    return D
     
+###############################################################################
+# Toy data generation methods
+###############################################################################
+
 def circleRPn(
     dim=4,
     segment_points=50,
@@ -95,6 +99,46 @@ def circleRPn(
         Xt = (X.T + N)/LA.norm(X.T+N,axis=0)
         X = Xt.T
     return X, num_points
+
+def bezier_RPn(ctrl_points,N=100,noise=0):
+    """Define a weird curve for testing purposes.
+    
+    Parameters
+    ----------
+    ctrl_points : ndarray
+        n*d array where each row is a control point of a Bezier curve
+        in R^d. The first row is the start point of the curve, and the
+        last row is the end point.
+    N : int, optional
+        Number of points to put on curve. Default is 1000.
+    
+    Returns
+    -------
+    B : ndarray
+        Array (N*d) with each row a point on the curve. Normalized to
+        lie on the sphere.
+
+    """
+
+    t = np.reshape(np.linspace(0,1,N),(N,1))
+    deg = ctrl_points.shape[0]-1
+    dim = ctrl_points.shape[1]
+    P = np.reshape(ctrl_points[0,:],(1,dim))
+    B = ((1-t)**deg)@P
+    for i in range(1,deg):
+        P = np.reshape(ctrl_points[i,:],(1,dim))
+        B = B + comb(deg,i)*((t**i)*((1-t)**(deg-i)))@P
+    P = np.reshape(ctrl_points[deg,:],(1,dim))
+    B = B + (t**deg)@P
+    if noise > 0 :
+        ns = noise*(np.random.rand(N,dim)-.5)
+        B = B+ns
+    B = (B.T/LA.norm(B,axis=1)).T
+    return B   
+
+###############################################################################
+# Algorithm Components
+###############################################################################
 
 def initial_guess(data,dim,guess_method='ppca'):
     """Use PPCA and Cholesky factor to get an initial input for lrcm_min
@@ -228,14 +272,6 @@ def graph_distance_matrix(data,epsilon=0.4,k=-1):
     Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
     return Dhat
 
-def acos_validate(M):
-    """Replace values in M outside of domain of acos with +/- 1."""
-    big_vals = M >= 1.0
-    M[big_vals] = 1.0
-    small_vals = M <= -1.0
-    M[small_vals] = -1.0
-    return M
-
 def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0):
     """Projective multi-dimensional scaling algorithm.
 
@@ -342,6 +378,10 @@ def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0
         S = S_new
     return Y, cost_list, true_cost_list
 
+###############################################################################
+# Output and Plotting
+###############################################################################
+
 def plot_RP2(X,ax,pullback=True,compare=False,Z=[]):
     """Plot data reduced onto RP2"""
 
@@ -353,7 +393,32 @@ def plot_RP2(X,ax,pullback=True,compare=False,Z=[]):
         ax.scatter(Z[:,0],Z[:,1],Z[:,2])
     return ax
 
+###############################################################################
+# Miscellaneous
+###############################################################################
+
+def acos_validate(M):
+    """Replace values in M outside of domain of acos with +/- 1."""
+    big_vals = M >= 1.0
+    M[big_vals] = 1.0
+    small_vals = M <= -1.0
+    M[small_vals] = -1.0
+    return M
+
+def projective_distance_matrix(Y):
+    """Construct the (exact) distance matrix of data Y on RP^d."""
+    S = np.sign(Y@Y.T)
+    M = S*(Y@Y.T)
+    acos_validate(M)
+    D = np.arccos(M)    # Initial distance matrix
+    return D
+
+###############################################################################
+# Tools for external library interfaces
+###############################################################################
+
 def lrcm_wrapper(C,W,Y0):
+    """Output to Grubisic and Pietersz LRCM matlab code."""
     io.savemat('ml_tmp.mat', dict(C=C,W=W,Y0=Y0))
     eng = matlab.engine.start_matlab()
     t = eng.lrcm_wrapper()
@@ -361,7 +426,12 @@ def lrcm_wrapper(C,W,Y0):
     return workspace
 
 def setup_cost(C,W):
-    """Create the cost functions.
+    """Create the cost functions for pymanopt, using explicit derivatives.
+
+    Pymanopt performs optimization routines on manifolds, which require
+    knowing the gradient and possibly hessian of the objective function
+    (on the appropriate Riemannian manifold). For the weighted Frobenius
+    norm objective function, there are explicit formulas defined here.
 
     Parameters
     ----------
@@ -378,6 +448,10 @@ def setup_cost(C,W):
         Gradient of cost function.
     hess : function
         Hessian of cost function.
+
+    Notes
+    -----
+    A full derivation can be found in Grubisic and Pietersz.
 
     """
     
@@ -398,6 +472,36 @@ def setup_cost(C,W):
     return F, dF, ddF
 
 def setup_ag_cost(S,D,appx='none'):
+    """Setup the cost function for autograd and pymanopt.
+
+    Pymanopt can compute derivatives automatically using autograd. This
+    function provides different approximations of the objective function
+        F(Y) = 1/2*||D - acos(abs(Y.T@Y))||^2
+    for use with autograd.
+    * 'none' supplies the exact formula for F, which performs badly
+        because abs is non-differentiably and acos is tricky.
+    * 'taylor' uses a cubic-order Taylor series approximation for acos.
+    * 'rational' uses a quartic rational approximation for acos.
+    * 'frobenius' uses a mean-value theorem argument to rewrite F as a
+        weighted frobenius norm and supplies that function.
+
+    Parameters
+    ----------
+    S : ndarray (square, 1 or -1)
+        Signs of entries in input matrix Y.T@Y. Used to avoid absolute
+        values.
+    D : ndarray (square, symmetric, positive)
+        Distance matrix for objective function.
+    appx: string, {'none','taylor','rational','frobenius'}
+        Type of approximation to use. See details above.
+
+    Returns
+    -------
+    F(Y) : function
+        Autograd compatible cost function.
+
+    """
+
     if appx == 'none':
         """Direct cost function with no approximations."""
         def F(Y):
@@ -420,47 +524,4 @@ def setup_ag_cost(S,D,appx='none'):
         def F(Y):
             return 0.5*np.linalg.norm(W*(S*np.cos(D)-Y.T@Y))**2
     return F
-
-def bezier_RPn(ctrl_points,N=100,noise=0):
-    """Define a weird curve for testing purposes.
-    
-    Parameters
-    ----------
-    ctrl_points : ndarray
-        n*d array where each row is a control point of a Bezier curve
-        in R^d. The first row is the start point of the curve, and the
-        last row is the end point.
-    N : int, optional
-        Number of points to put on curve. Default is 1000.
-    
-    Returns
-    -------
-    B : ndarray
-        Array (N*d) with each row a point on the curve. Normalized to
-        lie on the sphere.
-
-    """
-
-    t = np.reshape(np.linspace(0,1,N),(N,1))
-    deg = ctrl_points.shape[0]-1
-    dim = ctrl_points.shape[1]
-    P = np.reshape(ctrl_points[0,:],(1,dim))
-    B = ((1-t)**deg)@P
-    for i in range(1,deg):
-        P = np.reshape(ctrl_points[i,:],(1,dim))
-        B = B + comb(deg,i)*((t**i)*((1-t)**(deg-i)))@P
-    P = np.reshape(ctrl_points[deg,:],(1,dim))
-    B = B + (t**deg)@P
-    if noise > 0 :
-        ns = noise*(np.random.rand(N,dim)-.5)
-        B = B+ns
-    B = (B.T/LA.norm(B,axis=1)).T
-    return B   
-
-def projective_distance_matrix(Y):
-    S = np.sign(Y@Y.T)
-    M = S*(Y@Y.T)
-    acos_validate(M)
-    D = np.arccos(M)    # Initial distance matrix
-    return D
 
