@@ -10,8 +10,7 @@ import matplotlib.pyplot as plt
 # Setup for pymanopt.
 import pymanopt
 from pymanopt.manifolds import Oblique 
-from pymanopt.solvers import TrustRegions
-from pymanopt.solvers import ConjugateGradient
+from pymanopt.solvers import *
 import os
 import random 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -272,7 +271,7 @@ def graph_distance_matrix(data,epsilon=0.4,k=-1):
     Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
     return Dhat
 
-def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0):
+def pmds(Y,D,max_iter=20,verbosity=1,autograd=False,pmo_solve='cg'):
     """Projective multi-dimensional scaling algorithm.
 
     Detailed description in career grant, pages 6-7 (method 1).
@@ -287,8 +286,8 @@ def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0
     max_iter : int, optional
         Number of times to iterate the loop. Will eventually be updated
         to a better convergence criterion. Default is 20.
-    verbose : bool, optional
-        If true, print output relating to convergence conditions at each
+    verbosity : int, optional
+        If positive, print output relating to convergence conditions at each
         iteration.
     solve_prog : string, optional
         Choice of algorithm for low-rank correlation matrix reduction.
@@ -305,62 +304,65 @@ def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0
 
     num_points = Y.shape[0]
     rank = LA.matrix_rank(Y)
-    if verbose:
+    if verbosity > 0:
         print('Finding projection onto RP^%i.' %(rank-1))
-    if weighted:
-        W_inv = (1 - np.cos(D)**2)     
-        # Put zeros on the diagonal of W w/o dividing by zero.
-        W = np.sqrt((W_inv+np.eye(num_points))**-1 - np.eye(num_points))
-    else:
-        W = np.ones((num_points,num_points))
+    W = distance_to_weights(D)
     S = np.sign(Y@Y.T)
+    C = S*np.cos(D)
     if np.sum(S == 0) > 0:
         print('Warning: Some initial guess vectors are orthogonal, this may ' +
             'cause issues with convergence.')
-    C = S*np.cos(D)
-    cost_list = [0.5*LA.norm(W*(Y@Y.T) - W*C)**2]
-    true_cost_list = [0.5*LA.norm(D - np.arccos(acos_validate(np.abs(Y@Y.T))))**2]
-    if np.min(W) < 0 or np.min(np.cos(D)) < 0:
-        raise ValueError('Something is horribly wrong.')
-    if solve_prog == 'pymanopt' or solve_prog == 'autograd':
-        manifold = Oblique(rank,num_points) # Short, wide matrices.
-        solver = ConjugateGradient()
+    cost = setup_cost(D,S)
+    cost_list = [cost(Y.T)]
+    true_cost = setup_cost(projective_distance_matrix(Y),S)
+    true_cost_list = [true_cost(Y.T)]
+    manifold = Oblique(rank,num_points) # Short, wide matrices.
+    solver = ConjugateGradient()
+# TODO: play with alternate solve methods and manifolds.
+#   if pmo_solve == 'nm':
+#       solver = NelderMead()
+#   if pmo_solve == 'ps':
+#       solver = ParticleSwarm()
+#   if pmo_solve == 'tr':
+#       solver = TrustRegions()
+#   if pmo_solve == 'sd':
+#       solver = SteepestDescent()
+#   else:
+#       solver = ConjugateGradient()
+#       if solve_prog == 'matlab':
+# TODO: this may generate errors based on changes to other methods.
+#           cost, egrad, ehess = setup_cost(C,W)
+#           workspace = lrcm_wrapper(C,W,Y)
+#           Y_new = workspace['optimal_matrix']
     for i in range(0,max_iter):
-        if solve_prog == 'matlab':
-            cost, egrad, ehess = setup_cost(C,W)
-            workspace = lrcm_wrapper(C,W,Y)
-            Y_new = workspace['optimal_matrix']
-        elif solve_prog == 'pymanopt':
-            cost, egrad, ehess = setup_cost(C,W)
-            problem = pymanopt.Problem(manifold, cost, egrad=egrad, verbosity=verbose)
+        if autograd:
+            cost = setup_cost(D,S)
+            problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)
+        else:
+            cost, grad, hess = setup_cost(D,S,return_derivatives=True)
+            problem = pymanopt.Problem(manifold, cost, grad=grad, hess=hess, verbosity=verbosity)
+        if pmo_solve == 'cg' or pmo_solve == 'sd' or pmo_solve == 'tr':
+            # Use initial condition with gradient-based solvers.
             Y_new = solver.solve(problem,x=Y.T)
-            Y_new = Y_new.T
-        elif solve_prog == 'autograd':
-            cost = setup_ag_cost(S,D,appx)
-            problem = pymanopt.Problem(manifold, cost, verbosity=verbose)
-            Y_new = solver.solve(problem,x=Y.T)
-            Y_new = Y_new.T
+        else:
+            Y_new =  solver.solve(problem)
+        Y_new = Y_new.T     # Y should be tall-skinny
         cost_oldS = cost(Y_new.T)
-#        cost_oldS = 0.5*LA.norm(W*(Y_new@Y_new.T) - W*C)**2 
         cost_list.append(cost_oldS)
         S_new = np.sign(Y_new@Y_new.T)
         C_new = S_new*np.cos(D)
-        if solve_prog == 'matlab' or solve_prog == 'pymanopt':
-            cost_new,_,_ = setup_cost(C_new,W)
-        elif solve_prog == 'autograd':
-            cost_new = setup_ag_cost(S_new,D,appx)
+        cost_new = setup_cost(D,S_new)
         cost_newS = cost_new(Y_new.T)
-#       cost_newS = 0.5*LA.norm(W*(Y_new@Y_new.T) - W*C_new)**2 
         S_diff = ((LA.norm(S_new - S))**2)/4
         percent_S_diff = 100*S_diff/S_new.size
         percent_cost_diff = 100*(cost_list[i] - cost_list[i+1])/cost_list[i]
-        true_cost = 0.5*LA.norm(D - np.arccos(acos_validate(np.abs(Y_new@Y_new.T))))**2
-        true_cost_list.append(true_cost)
+        true_cost = setup_cost(projective_distance_matrix(Y),S)
+        true_cost_list.append(true_cost(Y_new.T))
         # Do an SVD to get the correlation matrix on the sphere.
         # Y,s,vh = LA.svd(out_matrix,full_matrices=False)
-        if verbose:
+        if verbosity > 0:
             print('Through %i iterations:' %(i+1))
-            print('\tTrue cost: %2.2f' %true_cost)
+            print('\tTrue cost: %2.2f' %true_cost(Y_new.T))
             print('\tComputed cost: %2.2f' %cost_list[i+1])
             print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
             print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
@@ -372,6 +374,8 @@ def pmds(Y,D,max_iter=20,verbose=True,solve_prog='pymanopt',weighted=True,appx=0
         if percent_cost_diff < .0001:
             print('No significant cost improvement. Stopping iterations.')
             break
+        if i == max_iter:
+            print('Maximum iterations reached.')
         # Update variables:
         Y = Y_new
         C = C_new
@@ -409,6 +413,12 @@ def acos_validate(M):
     M[small_vals] = -1.0
     return M
 
+def distance_to_weights(D):
+    """Compute the weight matrix W from the distance matrix D."""
+    W_inv = (1 - np.cos(D)**2)     
+    W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1 - np.eye(D.shape[0],D.shape[1]))
+    return W
+
 def projective_distance_matrix(Y):
     """Construct the (exact) distance matrix of data Y on RP^d."""
     S = np.sign(Y@Y.T)
@@ -429,17 +439,22 @@ def lrcm_wrapper(C,W,Y0):
     workspace = io.loadmat('py_tmp.mat')
     return workspace
 
-def setup_cost(C,W):
+def setup_cost(D,S,return_derivatives=False):
     """Create the cost functions for pymanopt, using explicit derivatives.
 
     Pymanopt performs optimization routines on manifolds, which require
     knowing the gradient and possibly hessian of the objective function
     (on the appropriate Riemannian manifold). For the weighted Frobenius
     norm objective function, there are explicit formulas defined here.
+    The weighted Frobenius norm is given by
+        F(Y) = ||W*S*cos(D) - W*Y.T@Y||^2
+    where W is a weight matrix. Note that here Y is short and wide, so
+    each column is a data point (a vector with norm one). The gradient
+    and hessian of F are computed in Grubisic and Pietersz.
 
     Parameters
     ----------
-    C : ndarray
+    D : ndarray
         Cost matrix
     S : ndarray
         Sign matrix
@@ -447,85 +462,87 @@ def setup_cost(C,W):
     Returns
     -------
     cost : function
-        Cost function for problem.
-    grad : function
+        Weighted Frobenius norm cost function.
+    grad : function, optional
         Gradient of cost function.
-    hess : function
+    hess : function, optional
         Hessian of cost function.
 
-    Notes
-    -----
-    A full derivation can be found in Grubisic and Pietersz.
-
     """
-    
+
+    W = distance_to_weights(D)
+    C = S*np.cos(D)
     def F(Y):
         """Weighted Frobenius norm cost function."""
-        return 0.5*LA.norm(W*(C-Y.T@Y), 'fro')**2
-
+        return 0.5*np.linalg.norm(W*(C-Y.T@Y))**2
     def dF(Y):
         """Derivative of weighted Frobenius norm cost."""
         Psi = Y.T@Y-C
         return 2*Y@(W*Psi)
-
     def ddF(Y,H):
         """Second derivative (Hessian) of weighted Frobenius norm cost."""
         Psi = Y.T@Y-C
         return 2*((W*Psi)@H + (W*(Y@H.T + H@Y.T))@Y)
-    
-    return F, dF, ddF
+    if return_derivatives:
+        return F, dF, ddF
+    else:
+        return F
 
-def setup_ag_cost(S,D,appx='none'):
-    """Setup the cost function for autograd and pymanopt.
+###############################################################################
+# Old Stuff
+###############################################################################
 
-    Pymanopt can compute derivatives automatically using autograd. This
-    function provides different approximations of the objective function
-        F(Y) = 1/2*||D - acos(abs(Y.T@Y))||^2
-    for use with autograd.
-    * 'none' supplies the exact formula for F, which performs badly
-        because abs is non-differentiably and acos is tricky.
-    * 'taylor' uses a cubic-order Taylor series approximation for acos.
-    * 'rational' uses a quartic rational approximation for acos.
-    * 'frobenius' uses a mean-value theorem argument to rewrite F as a
-        weighted frobenius norm and supplies that function.
-
-    Parameters
-    ----------
-    S : ndarray (square, 1 or -1)
-        Signs of entries in input matrix Y.T@Y. Used to avoid absolute
-        values.
-    D : ndarray (square, symmetric, positive)
-        Distance matrix for objective function.
-    appx: string, {'none','taylor','rational','frobenius'}
-        Type of approximation to use. See details above.
-
-    Returns
-    -------
-    F(Y) : function
-        Autograd compatible cost function.
-
-    """
-
-    if appx == 'none':
-        """Direct cost function with no approximations."""
-        def F(Y):
-            return 0.5*np.linalg.norm(np.arccos(S*(Y.T@Y)) - D)**2
-    elif appx == 'taylor':
-        # Taylor-series bases polynomial cost.
-        def F(Y):
-            return 0.5*np.linalg.norm(S*(np.pi/2 - D) - Y.T@Y - .1667*(Y.T@Y)**3)**2
-    elif appx == 'rational':
-        # Rational function approximation.
-        a = -0.939115566365855
-        b =  0.9217841528914573
-        c = -1.2845906244690837
-        d =  0.295624144969963174
-        def F(Y):
-            return 0.5*np.linalg.norm(S*D - S*np.pi/2 - (a*(Y.T@Y) + b*(Y.T@Y)**3)/(1 + c*(Y.T@Y)**2 + d*(Y.T@Y)**4))**2
-    elif appx == 'frobenius':
-        W_inv = (1 - np.cos(D)**2)     
-        W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1 - np.eye(D.shape[0],D.shape[1]))
-        def F(Y):
-            return 0.5*np.linalg.norm(W*(S*np.cos(D)-Y.T@Y))**2
-    return F
+#def setup_ag_cost(S,D):
+#    """Setup the cost function for autograd and pymanopt.
+#
+#    Pymanopt can compute derivatives automatically using autograd. This
+#    function provides different approximations of the objective function
+#        F(Y) = 1/2*||D - acos(abs(Y.T@Y))||^2
+#    for use with autograd.
+#    * 'none' supplies the exact formula for F, which performs badly
+#        because abs is non-differentiably and acos is tricky.
+#    * 'taylor' uses a cubic-order Taylor series approximation for acos.
+#    * 'rational' uses a quartic rational approximation for acos.
+#    * 'frobenius' uses a mean-value theorem argument to rewrite F as a
+#        weighted frobenius norm and supplies that function.
+#
+#    Parameters
+#    ----------
+#    S : ndarray (square, 1 or -1)
+#        Signs of entries in input matrix Y.T@Y. Used to avoid absolute
+#        values.
+#    D : ndarray (square, symmetric, positive)
+#        Distance matrix for objective function.
+#    appx: string, {'none','taylor','rational','frobenius'}
+#        Type of approximation to use. See details above. (Deprecated.)
+#
+#    Returns
+#    -------
+#    F(Y) : function
+#        Autograd compatible cost function.
+#
+#    """
+#
+#    if appx == 'none':
+#        """Direct cost function with no approximations."""
+#        def F(Y):
+#            YY = acos_validate(Y.T@Y)
+#            return 0.5*np.linalg.norm(np.arccos(S*(YY)) - D)**2
+#    elif appx == 'taylor':
+#        # Taylor-series bases polynomial cost.
+#        def F(Y):
+#            return 0.5*np.linalg.norm(S*(np.pi/2 - D) - Y.T@Y - .1667*(Y.T@Y)**3)**2
+#    elif appx == 'rational':
+#        # Rational function approximation.
+#        a = -0.939115566365855
+#        b =  0.9217841528914573
+#        c = -1.2845906244690837
+#        d =  0.295624144969963174
+#        def F(Y):
+#            return 0.5*np.linalg.norm(S*D - S*np.pi/2 - (a*(Y.T@Y) + b*(Y.T@Y)**3)/(1 + c*(Y.T@Y)**2 + d*(Y.T@Y)**4))**2
+#    elif appx == 'frobenius':
+#   W = distance_to_weights(D)
+#   def F(Y):
+#       return 0.5*np.linalg.norm(W*(S*np.cos(D)-Y.T@Y))**2
+#   return F
 
