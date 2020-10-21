@@ -339,8 +339,8 @@ def pmds(Y,D,max_iter=20,verbosity=1,autograd=False,pmo_solve='cg'):
             cost = setup_cost(D,S)
             problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)
         else:
-            cost, grad, hess = setup_cost(D,S,return_derivatives=True)
-            problem = pymanopt.Problem(manifold, cost, grad=grad, hess=hess, verbosity=verbosity)
+            cost, egrad, ehess = setup_cost(D,S,return_derivatives=True)
+            problem = pymanopt.Problem(manifold, cost, egrad=egrad, ehess=ehess, verbosity=verbosity)
         if pmo_solve == 'cg' or pmo_solve == 'sd' or pmo_solve == 'tr':
             # Use initial condition with gradient-based solvers.
             Y_new = solver.solve(problem,x=Y.T)
