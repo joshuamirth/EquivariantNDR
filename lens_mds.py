@@ -237,6 +237,7 @@ def get_masks(S,p):
     return M
 
 def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
+    sqrt_omega = g_action_matrix(p,omega.shape[0]-1)
     # TODO: figure out how not to hard code this.
 #   if p == 2:
 #       def F(Y):
@@ -254,7 +255,7 @@ def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
             ))
     def dF(Y):
         return 2*(sum([
-            mp(omega,i)@Y@(M[i]*W**2*(Y.T@mp(omega,i)@Y - np.cos(D)))
+            mp(omega,p-i)@Y@(M[i]*W**2*(Y.T@mp(omega,i)@Y - np.cos(D)))
             for i in range(p)]
             ))
     if return_derivatives:
