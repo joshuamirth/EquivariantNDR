@@ -1,12 +1,13 @@
 """ Dimensionality reduction on Lens spaces using an MDS-type method. """
 import autograd.numpy as np
 import autograd.numpy.linalg as LA
+from autograd.numpy.linalg import matrix_power as mp
 import matplotlib.pyplot as plt
 import pymanopt
 from pymanopt.solvers import *
 from pymanopt.manifolds import Oblique
 
-def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
+def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True):
     """Lens multi-dimensional scaling algorithm.
 
     Parameters
@@ -48,13 +49,14 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
     W = distance_to_weights(D)
     omega = g_action_matrix(p,d)
     S = optimal_rotation(Y.T,omega,p)
+    M = get_masks(S,p)
     C = np.cos(D)
 #   if d%2 == 0:
 #       raise ValueError('Input data matrix must have an even number of ' +
 #           'columns (must be on an odd-dimensional sphere). Given data had ' +
 #           '%i columns.',%(d+1))
     # TODO: verify that input is valid.
-    cost = setup_cost(Y,omega,S,D,W)
+    cost = setup_sum_cost(omega,M,D,W,p)
     cost_list = [cost(Y.T)]
 #   true_cost = setup_cost(projective_distance_matrix(Y),S)
 #   true_cost = setup_cost(Y,omega,S,D,W)
@@ -66,18 +68,23 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
         solver = NelderMead()
     # TODO: implement and experiment with other solvers.
     for i in range(0,max_iter):
-        cost = setup_cost(Y,omega,S,D,W)
-        problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)
+        if autograd:
+            cost = setup_sum_cost(omega,M,D,W,p)
+            problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)        
+        else:
+            cost, egrad = setup_sum_cost(omega,M,D,W,p,return_derivatives=True)
+            problem = pymanopt.Problem(manifold, cost, egrad=egrad, verbosity=verbosity)
         if pmo_solve == 'cg' or pmo_solve == 'sd' or pmo_solve == 'tr':
             Y_new = solver.solve(problem,x=Y.T)
         else:
             Y_new =  solver.solve(problem)
         Y_new = Y_new.T     # Y should be tall-skinny
-        cost_oldS = cost(Y_new.T)
-        cost_list.append(cost_oldS)
+        cost_oldM = cost(Y_new.T)
+        cost_list.append(cost_oldM)
         S_new = optimal_rotation(Y_new.T,omega,p)
-        cost_new = setup_cost(Y_new,omega,S_new,D,W)
-        cost_newS = cost_new(Y_new.T)
+        M_new = get_masks(S_new,p)
+        cost_new = setup_sum_cost(omega,M_new,D,W,p)
+        cost_newM = cost_new(Y_new.T)
         S_diff = ((LA.norm(S_new - S))**2)/4
         percent_S_diff = 100*S_diff/S_new.size
         percent_cost_diff = 100*(cost_list[i] - cost_list[i+1])/cost_list[i]
@@ -91,7 +98,7 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
             print('\tComputed cost: %2.2f' %cost_list[i+1])
             print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
             print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
-            print('\tComputed cost with new S: %2.2f' %cost_newS)
+            print('\tComputed cost with new M: %2.2f' %cost_newM)
 #           print('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)))
         if S_diff < 1:
             print('No change in S matrix. Stopping iterations')
@@ -105,6 +112,7 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
         Y = Y_new
 #       C = C_new
         S = S_new
+        M = M_new
     return Y, cost_list
 
 def g_action_matrix(p,d):
@@ -165,7 +173,7 @@ def optimal_rotation(Y,omega,p):
     minYY = np.arccos(acos_validate(Y.T@Y))
     S = np.zeros(np.shape(Y.T@Y))
     for i in range(1,p):
-        tmpYY = np.arccos(acos_validate(Y.T@LA.matrix_power(omega,i)@Y))
+        tmpYY = np.arccos(acos_validate(Y.T@mp(omega,i)@Y))
         S[tmpYY<minYY] = i
         minYY = np.minimum(minYY,tmpYY)
     return S
@@ -194,10 +202,10 @@ def lens_inner_product(Y,omega,S):
     YY = np.zeros((n,n))
     for i in range(0,n):
         for j in range(0,n):
-            YY[i,j] = Y.T[i,:] @ LA.matrix_power(omega,int(S[i,j])) @ Y[:,j]           
+            YY[i,j] = Y.T[i,:] @ mp(omega,int(S[i,j])) @ Y[:,j]           
     return YY
 
-def setup_cost(Y,omega,S,D,W):
+def setup_cost(omega,S,D,W):
     def F(Y):
         return 0.5*LA.norm(W*lens_inner_product(Y,omega,S) - W*np.cos(D))**2
     return F
@@ -209,4 +217,48 @@ def acos_validate(M):
     small_vals = M <= -1.0
     M[small_vals] = -1.0
     return M
+
+def get_masks(S,p):
+    """Turn matrix of correct powers into masks.
+
+    Parameters
+    ----------
+    S : ndarray (n,n)
+    p : int
+
+    Returns
+    M : list of ndarrays p*(n,n)
+
+    """
+    
+    M = []
+    for i in range(p):
+        M.append(S==i)
+    return M
+
+def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
+    # TODO: figure out how not to hard code this.
+#   if p == 2:
+#       def F(Y):
+#           return 0.5*(
+#               LA.norm(M[0]*W*(Y.T@LA.mp(omega,0)@Y) - M[0]*W*np.cos(D))**2 +
+#               LA.norm(M[1]*W*(Y.T@LA.mp(omega,1)@Y) - M[1]*W*np.cos(D))**2)
+#       def dF(Y):
+#           return 2*(Y@(M[0]*W**2*(Y.T@Y-np.cos(D))) + 
+#               omega@Y@(M[1]*W**2*(Y.T@omega@Y-np.cos(D))))
+#   else:
+    def F(Y):
+        return 0.5*(sum([
+            LA.norm(M[i]*W*(Y.T@mp(omega,i)@Y) -
+            M[i]*W*np.cos(D))**2 for i in range(p)]
+            ))
+    def dF(Y):
+        return 2*(sum([
+            mp(omega,i)@Y@(M[i]*W**2*(Y.T@mp(omega,i)@Y - np.cos(D)))
+            for i in range(p)]
+            ))
+    if return_derivatives:
+        return F, dF
+    else:
+        return F
 
