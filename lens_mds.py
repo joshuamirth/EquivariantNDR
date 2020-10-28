@@ -2,6 +2,9 @@
 import autograd.numpy as np
 import autograd.numpy.linalg as LA
 import matplotlib.pyplot as plt
+import pymanopt
+from pymanopt.solvers import *
+from pymanopt.manifolds import Oblique
 
 def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
     """Lens multi-dimensional scaling algorithm.
@@ -43,20 +46,20 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
     m = Y.shape[0]
     d = Y.shape[1] - 1
     W = distance_to_weights(D)
-    S = optimal_rotation(Y.T)
+    omega = g_action_matrix(p,d)
+    S = optimal_rotation(Y.T,omega,p)
     C = np.cos(D)
 #   if d%2 == 0:
 #       raise ValueError('Input data matrix must have an even number of ' +
 #           'columns (must be on an odd-dimensional sphere). Given data had ' +
 #           '%i columns.',%(d+1))
     # TODO: verify that input is valid.
-    omega = g_action_matrix(p,d)
     cost = setup_cost(Y,omega,S,D,W)
     cost_list = [cost(Y.T)]
 #   true_cost = setup_cost(projective_distance_matrix(Y),S)
 #   true_cost = setup_cost(Y,omega,S,D,W)
 #   true_cost_list = [true_cost(Y.T)]
-    manifold = Oblique(rank,num_points) # Short, wide matrices.
+    manifold = Oblique(d+1,m) # Short, wide matrices.
     if pmo_solve == 'cg':
         solver = ConjugateGradient()
     elif pmo_solve == 'nm':
@@ -72,7 +75,7 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
         Y_new = Y_new.T     # Y should be tall-skinny
         cost_oldS = cost(Y_new.T)
         cost_list.append(cost_oldS)
-        S_new = optimal_rotation(Y_new.T)
+        S_new = optimal_rotation(Y_new.T,omega,p)
         cost_new = setup_cost(Y_new,omega,S_new,D,W)
         cost_newS = cost_new(Y_new.T)
         S_diff = ((LA.norm(S_new - S))**2)/4
