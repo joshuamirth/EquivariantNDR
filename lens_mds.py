@@ -199,8 +199,7 @@ def lens_inner_product(Y,omega,S):
 
 def setup_cost(Y,omega,S,D,W):
     def F(Y):
-        YY = lens_inner_product(Y,omega,S)
-        return 0.5*LA.norm(W*YY - W*np.cos(D))**2
+        return 0.5*LA.norm(W*lens_inner_product(Y,omega,S) - W*np.cos(D))**2
     return F
 
 def acos_validate(M):
