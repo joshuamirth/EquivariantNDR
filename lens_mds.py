@@ -43,21 +43,66 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg'):
     m = Y.shape[0]
     d = Y.shape[1] - 1
     W = distance_to_weights(D)
-    S = optimal_rotation(Y)
+    S = optimal_rotation(Y.T)
     C = np.cos(D)
 #   if d%2 == 0:
 #       raise ValueError('Input data matrix must have an even number of ' +
 #           'columns (must be on an odd-dimensional sphere). Given data had ' +
 #           '%i columns.',%(d+1))
-    
     # TODO: verify that input is valid.
     omega = g_action_matrix(p,d)
     cost = setup_cost(Y,omega,S,D,W)
     cost_list = [cost(Y.T)]
-    true_cost = setup_cost(projective_distance_matrix(Y),S)
-    true_cost_list = [true_cost(Y.T)]
+#   true_cost = setup_cost(projective_distance_matrix(Y),S)
+#   true_cost = setup_cost(Y,omega,S,D,W)
+#   true_cost_list = [true_cost(Y.T)]
     manifold = Oblique(rank,num_points) # Short, wide matrices.
-    solver = ConjugateGradient()
+    if pmo_solve == 'cg':
+        solver = ConjugateGradient()
+    elif pmo_solve == 'nm':
+        solver = NelderMead()
+    # TODO: implement and experiment with other solvers.
+    for i in range(0,max_iter):
+        cost = setup_cost(Y,omega,S,D,W)
+        problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)
+        if pmo_solve == 'cg' or pmo_solve == 'sd' or pmo_solve == 'tr':
+            Y_new = solver.solve(problem,x=Y.T)
+        else:
+            Y_new =  solver.solve(problem)
+        Y_new = Y_new.T     # Y should be tall-skinny
+        cost_oldS = cost(Y_new.T)
+        cost_list.append(cost_oldS)
+        S_new = optimal_rotation(Y_new.T)
+        cost_new = setup_cost(Y_new,omega,S_new,D,W)
+        cost_newS = cost_new(Y_new.T)
+        S_diff = ((LA.norm(S_new - S))**2)/4
+        percent_S_diff = 100*S_diff/S_new.size
+        percent_cost_diff = 100*(cost_list[i] - cost_list[i+1])/cost_list[i]
+#       true_cost = setup_cost(projective_distance_matrix(Y),S)
+#       true_cost_list.append(true_cost(Y_new.T))
+        # Do an SVD to get the correlation matrix on the sphere.
+        # Y,s,vh = LA.svd(out_matrix,full_matrices=False)
+        if verbosity > 0:
+            print('Through %i iterations:' %(i+1))
+#           print('\tTrue cost: %2.2f' %true_cost(Y_new.T))
+            print('\tComputed cost: %2.2f' %cost_list[i+1])
+            print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
+            print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
+            print('\tComputed cost with new S: %2.2f' %cost_newS)
+#           print('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)))
+        if S_diff < 1:
+            print('No change in S matrix. Stopping iterations')
+            break
+        if percent_cost_diff < .0001:
+            print('No significant cost improvement. Stopping iterations.')
+            break
+        if i == max_iter:
+            print('Maximum iterations reached.')
+        # Update variables:
+        Y = Y_new
+#       C = C_new
+        S = S_new
+    return Y, cost_list
 
 def g_action_matrix(p,d):
     """Create a matrix corresponding to the action of Z_p on S^d. 
@@ -114,8 +159,6 @@ def optimal_rotation(Y,omega,p):
 
     """
 
-    # The maximum inner product should be the cosine of half the
-    # diameter of the space, and the diameter is 2*pi/p.
     minYY = np.arccos(acos_validate(Y.T@Y))
     S = np.zeros(np.shape(Y.T@Y))
     for i in range(1,p):
