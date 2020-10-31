@@ -155,7 +155,7 @@ def distance_to_weights(D):
     W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1 - np.eye(D.shape[0],D.shape[1]))
     return W
 
-def optimal_rotation(Y,omega,p):
+def optimal_rotation_new(Y,p):
     """Choose the correct representative from each equivalence class.
 
     Parameters
@@ -176,6 +176,25 @@ def optimal_rotation(Y,omega,p):
 
     """
 
+    # New clever algorithm:
+    # Compute COMPLEX inner product Y.T@Y
+    # Determine angle of each complex number.
+    # Assign to each ip the integer k such that k*omega is closest to
+    # its angle.   
+
+    # Convert Y to complex form:
+    Ycplx = Y[0::2] + 1j*Y[1::2]
+    cplx_ip = Ycplx.T@Ycplx.conjugate()
+    ip_angles = np.angle(cplx_ip)
+    root_angles = np.linspace(0,2*np.pi,p,endpoint=False)
+    S = np.zeros(ip_angles.shape)
+    for i in range(ip_angles.shape[0]):
+        for j in range(ip_angles.shape[1]):
+            S[i,j] = np.argmin(np.abs(ip_angles[i,j] - root_angles))
+    return S
+    
+
+def optimal_rotation(Y,omega,p):
     minYY = np.arccos(acos_validate(Y.T@Y))
     S = np.zeros(np.shape(Y.T@Y))
     for i in range(1,p):
