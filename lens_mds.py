@@ -7,7 +7,7 @@ import pymanopt
 from pymanopt.solvers import *
 from pymanopt.manifolds import Oblique
 
-def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True):
+def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True,appx=False):
     """Lens multi-dimensional scaling algorithm.
 
     Parameters
@@ -48,8 +48,11 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True):
     d = Y.shape[1] - 1
     W = distance_to_weights(D)
     omega = g_action_matrix(p,d)
-    S = optimal_rotation(Y.T,omega,p)
-    M = get_masks(S,p)
+    if appx:
+        M = get_blurred_masks(Y.T,omega,p,D)
+    else:
+        S = optimal_rotation(Y.T,omega,p)
+        M = get_masks(S,p)
     C = np.cos(D)
 #   if d%2 == 0:
 #       raise ValueError('Input data matrix must have an even number of ' +
@@ -81,12 +84,15 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True):
         Y_new = Y_new.T     # Y should be tall-skinny
         cost_oldM = cost(Y_new.T)
         cost_list.append(cost_oldM)
-        S_new = optimal_rotation(Y_new.T,omega,p)
-        M_new = get_masks(S_new,p)
+        if appx:
+            M_new = get_blurred_masks(Y_new.T,omega,p,D)
+        else:
+            S_new = optimal_rotation(Y_new.T,omega,p)
+            M_new = get_masks(S_new,p)
         cost_new = setup_sum_cost(omega,M_new,D,W,p)
         cost_newM = cost_new(Y_new.T)
-        S_diff = ((LA.norm(S_new - S))**2)/4
-        percent_S_diff = 100*S_diff/S_new.size
+#       S_diff = ((LA.norm(S_new - S))**2)/4
+#       percent_S_diff = 100*S_diff/S_new.size
         percent_cost_diff = 100*(cost_list[i] - cost_list[i+1])/cost_list[i]
 #       true_cost = setup_cost(projective_distance_matrix(Y),S)
 #       true_cost_list.append(true_cost(Y_new.T))
@@ -97,12 +103,12 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True):
 #           print('\tTrue cost: %2.2f' %true_cost(Y_new.T))
             print('\tComputed cost: %2.2f' %cost_list[i+1])
             print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
-            print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
+#           print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
             print('\tComputed cost with new M: %2.2f' %cost_newM)
 #           print('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)))
-        if S_diff < 1:
-            print('No change in S matrix. Stopping iterations')
-            break
+#       if S_diff < 1:
+#           print('No change in S matrix. Stopping iterations')
+#           break
         if percent_cost_diff < .0001:
             print('No significant cost improvement. Stopping iterations.')
             break
@@ -111,7 +117,7 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True):
         # Update variables:
         Y = Y_new
 #       C = C_new
-        S = S_new
+#       S = S_new
         M = M_new
     return Y, cost_list
 
@@ -178,38 +184,6 @@ def optimal_rotation(Y,omega,p):
         minYY = np.minimum(minYY,tmpYY)
     return S
 
-def lens_inner_product(Y,omega,S):
-    """Computes the inner product Y.T@Y with the correct representatives.
-
-    Parameters
-    ----------
-    Y : ndarray (d*n)
-        Data with each point as a column.
-    w : ndarray (d*d)
-        Root of unity.
-    S : ndarray (n*n)
-        Matrix containing list of correct power of w for each inner product.
-
-    Returns
-    -------
-    YY : ndarray (n*n)
-        Inner product matrix Y.T@Y where all use correct representative.
-
-    """
-
-    # TODO: vectorize this and remove for loops.
-    n = Y.shape[1]
-    YY = np.zeros((n,n))
-    for i in range(0,n):
-        for j in range(0,n):
-            YY[i,j] = Y.T[i,:] @ mp(omega,int(S[i,j])) @ Y[:,j]           
-    return YY
-
-def setup_cost(omega,S,D,W):
-    def F(Y):
-        return 0.5*LA.norm(W*lens_inner_product(Y,omega,S) - W*np.cos(D))**2
-    return F
-
 def acos_validate(M):
     """Replace values in M outside of domain of acos with +/- 1."""
     big_vals = M >= 1.0
@@ -237,17 +211,7 @@ def get_masks(S,p):
     return M
 
 def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
-    sqrt_omega = g_action_matrix(p,omega.shape[0]-1)
-    # TODO: figure out how not to hard code this.
-#   if p == 2:
-#       def F(Y):
-#           return 0.5*(
-#               LA.norm(M[0]*W*(Y.T@LA.mp(omega,0)@Y) - M[0]*W*np.cos(D))**2 +
-#               LA.norm(M[1]*W*(Y.T@LA.mp(omega,1)@Y) - M[1]*W*np.cos(D))**2)
-#       def dF(Y):
-#           return 2*(Y@(M[0]*W**2*(Y.T@Y-np.cos(D))) + 
-#               omega@Y@(M[1]*W**2*(Y.T@omega@Y-np.cos(D))))
-#   else:
+    """docstring"""
     def F(Y):
         return 0.5*(sum([
             LA.norm(M[i]*W*(Y.T@mp(omega,i)@Y) -
@@ -262,4 +226,16 @@ def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
         return F, dF
     else:
         return F
+
+def get_blurred_masks(Y,omega,p,D):
+    """Get approximate versions of the masks by integrating."""
+
+    M = []
+    tmp = np.zeros(np.size(Y.T@Y))
+    for i in range(p):
+        tmp = 1/np.abs(D - np.arccos(acos_validate(Y.T@mp(omega,i)@Y)))
+#       tmp = 1/np.arccos(acos_validate(Y.T@mp(omega,i)@Y))
+        M.append(tmp)
+    M = np.nan_to_num(M/sum(M),nan=1.0)
+    return M
 
