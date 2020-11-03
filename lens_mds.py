@@ -255,3 +255,33 @@ def get_blurred_masks(Y,omega,p,D):
     M = np.nan_to_num(M/sum(M),nan=1.0)
     return M
 
+def get_crossed_line_patches(dim, NAngles, NOffsets, sigma):
+    """
+    Sample a set of line segments, as witnessed by square patches
+    Parameters
+    ----------
+    dim: int
+        Patches will be dim x dim
+    NAngles: int
+        Number of angles to sweep between 0 and pi
+    NOffsets: int
+        Number of offsets to sweep from the origin to the edge of the patch
+    sigma: float
+        The blur parameter.  Higher sigma is more blur
+    """
+
+    N = NAngles*NOffsets
+    P = np.zeros((N, dim*dim))
+    thetas = np.linspace(0, np.pi, NAngles+1)[0:NAngles]
+    ps = np.linspace(-1, 1, NOffsets)
+    idx = 0
+    [Y, X] = np.meshgrid(np.linspace(-0.5, 0.5, dim), np.linspace(-0.5, 0.5, dim))
+    for i in range(NAngles):
+        c = np.cos(thetas[i])
+        s = np.sin(thetas[i])
+        for j in range(NOffsets):
+            patch = X*c + Y*s + ps[j]
+            patch = np.exp(-patch**2/sigma**2)
+            P[idx, :] = patch.flatten()
+            idx += 1
+    return P
