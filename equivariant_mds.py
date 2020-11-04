@@ -26,7 +26,7 @@ except:
 def emds(
     X,
     D,
-    q=2,
+    q=1,
     max_iter=20,
     verbosity=1,
     autograd=False,
@@ -51,7 +51,9 @@ def emds(
         Distance matrix determining cost. 
     q : int, optional
         Integer determining which cyclic group to use for quotient.
-        Default is 2, so that the quotient is real projective space.
+        Default is 1, meaning the trivial quotient, and the reduction
+        happens on the sphere. Choosing q=2 gives projective space, and
+        q>=3 is the lens space L^d_q.
     max_iter : int, optional
         Number of times to iterate the loop. Default is 20. Rarely are
         more required.
@@ -80,9 +82,18 @@ def emds(
     The sphere S^n modulo Z/qZ is a lens space. The special case of q=2
     is real projective space. The objective function optimized is the
     Hadamard semi-norm
-        F(Y) = ||W*(cos(D)-Y.T@Y)||^2
+    .. math:: F(Y) = \|W\odot(\cos(D)-Y^TY)\|^2
     where the weights W are determined by the distance matrix D.
 
+    Examples
+    --------
+
+    >>> import data_examples
+    >>> X = data_examples.circleRPn()
+    >>> D = geo_distance_matrix(X,k=5)
+    >>> X0 = epca(X,2)
+    >>> Y = emds(X,D,p=2)
+    
     """
 
 
@@ -95,17 +106,67 @@ def emds(
 ###############################################################################
 
 def acos_validate(M):
-    """Replace values in M outside of domain of acos with +/- 1."""
+    """Replace values in M outside of domain of acos with +/- 1.
+
+    Parameters
+    ----------
+    M : ndarray, mutable
+        Matrix of values that are approximately in [-1,1].
+
+    Returns
+    -------
+    M : ndarray
+        The original matrix with values > 1 replaced with 1 and values <
+        -1 replaced by -1.
+
+    """
+
     big_vals = M >= 1.0
     M[big_vals] = 1.0
     small_vals = M <= -1.0
     M[small_vals] = -1.0
     return M
 
-def distance_to_weights(D):
-    """Compute the weight matrix W from the distance matrix D."""
+def distance_to_weights(D,tol=10.0**-14):
+    """Compute the weight matrix W from the distance matrix D.
+
+    Parameters
+    ----------
+    D : ndarray (m*n)
+        Matrix representing a metric or dissimilarity.
+    tol : float, optional
+        Tolerance around zero. Computing `W` involves taking the
+        pointwise reciprocal of entries in `D`. To avoid division by
+        zero errors, values less than `tol` are not inverted.
+
+    Returns
+    -------
+    W : ndarray (m*n)
+        Weights corresponding to D
+
+    Notes
+    -----
+    In order to remove the arccos from the objective function
+        ||arccos(X.T@X) - D||,
+    cosine is taken and the norm reweighted by
+        W[ij] = (1-cos^2(D[ij])^(-1/2).
+    (This is justified by a mean-value theorem argument.) However, `W`
+    undefined if D[ij] = 0. For a distance matrix it must hold that
+    D[ii] = 0, so zeros must be handled. We choose to set the weight
+    corresponding to any 0 in `D` to 0 since the structure of the
+    problem guarantees the correct values will appear on the diagonal
+    regardless of the weight placed there. This also permits the metric
+    `D` to be represented by an upper- or lower-triangular matrix. If
+    `D` is not a true distance matrix or contains very small distances
+    zeroing these values may have unintended consequences.
+
+    """
+
     W_inv = (1 - np.cos(D)**2)     
-    W = np.sqrt((W_inv+np.eye(D.size))**-1 - np.eye(D.size))
+    bad_vals = np.abs(D) < tol
+    W_inv[bad_vals] = 1
+    W = np.sqrt(W_inv**-1)
+    W[bad_vals] = 0
     return W
 
 ###############################################################################
@@ -126,108 +187,5 @@ def plot_RP2(X,axes=None,pullback=True,compare=False,Z=[]):
         axes.scatter(Z[:,0],Z[:,1],Z[:,2])
     plt.suptitle('Plot on RP^2')
     return axes
-
-
-
-###############################################################################
-# Toy data generation methods
-###############################################################################
-
-def circleRPn(
-    dim=4,
-    segment_points=50,
-    num_segments=4,
-    noise=False,
-    v=0.2,
-    randomize=True
-):
-    """Construct points on a "kinked" circle in RP^d.
-
-    Constructs a curve of evenly-spaced points along the great circle
-    from e_i to e_{i+1} in R^{d+1}, starting at e_0 and finishing at
-    e_i with i = num_segments, then returns to -e_0.
-
-    It is recommended that dim==num_segments, otherwise the resulting
-    data matrix will not be full rank, which can cause issues later.
-    Similarly, the output data is randomly permuted so that the first n
-    points are not on the same linear subspace, generically.
-
-    Parameters
-    ----------
-    dim : int, optional
-        Dimension of RP^d to work on (ambient euclidean space is dim+1).
-    segment_points : int, optional
-        Number of points along each segment of curve.
-    num_segments : int, optional
-        Number of turns to make before returning to start point.
-
-    Returns
-    -------
-    X : ndarray
-        Array of coordinate values in R^{d+1}.
-    """
-    if int(num_segments) != num_segments:
-        raise ValueError("""Number of segments must be a positive integer.
-            Supplied value was %2.2f.""" %num_segments)
-    if num_segments < 1 or dim < 1:
-        raise ValueError("""Number of segments and dimension must be positive
-            integers. Supplied values were num_segments = %2.2f and dimension
-            = %2.2f""" %(num_segments,dim))    
-    if dim < num_segments:
-        raise ValueError("""Value of dimension must be larger than number of
-            segments. Supplied dimension was %i and number of segments was
-            %i""" %(dim,num_segments))
-    rng = np.random.default_rng(57)
-    num_points = segment_points*(num_segments+1)
-    theta = np.linspace(0,np.pi/2,segment_points,endpoint=False)
-    X = np.zeros((num_points,dim+1))
-    segment_curve = np.array([np.cos(theta),np.sin(theta)]).T
-    for i in range(0,num_segments):
-        X[i*segment_points:(i+1)*segment_points,i:i+2] = segment_curve
-    X[num_segments*segment_points:num_points,0] = -np.sin(theta)
-    X[num_segments*segment_points:num_points,num_segments] = np.cos(theta)
-    if randomize:
-        X = rng.permutation(X)
-    if noise:
-        N = v*rng.random((dim+1,num_points))
-        Xt = (X.T + N)/LA.norm(X.T+N,axis=0)
-        X = Xt.T
-    return X
-
-def bezier_RPn(ctrl_points,N=100,noise=0):
-    """Define a weird curve for testing purposes.
-    
-    Parameters
-    ----------
-    ctrl_points : ndarray
-        n*d array where each row is a control point of a Bezier curve
-        in R^d. The first row is the start point of the curve, and the
-        last row is the end point.
-    N : int, optional
-        Number of points to put on curve. Default is 1000.
-    
-    Returns
-    -------
-    B : ndarray
-        Array (N*d) with each row a point on the curve. Normalized to
-        lie on the sphere.
-
-    """
-
-    t = np.reshape(np.linspace(0,1,N),(N,1))
-    deg = ctrl_points.shape[0]-1
-    dim = ctrl_points.shape[1]
-    P = np.reshape(ctrl_points[0,:],(1,dim))
-    B = ((1-t)**deg)@P
-    for i in range(1,deg):
-        P = np.reshape(ctrl_points[i,:],(1,dim))
-        B = B + comb(deg,i)*((t**i)*((1-t)**(deg-i)))@P
-    P = np.reshape(ctrl_points[deg,:],(1,dim))
-    B = B + (t**deg)@P
-    if noise > 0 :
-        ns = noise*(np.random.rand(N,dim)-.5)
-        B = B+ns
-    B = (B.T/LA.norm(B,axis=1)).T
-    return B   
 
 
