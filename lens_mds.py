@@ -255,33 +255,49 @@ def get_blurred_masks(Y,omega,p,D):
     M = np.nan_to_num(M/sum(M),nan=1.0)
     return M
 
-def get_crossed_line_patches(dim, NAngles, NOffsets, sigma):
-    """
-    Sample a set of line segments, as witnessed by square patches
+def lpca(X,dim,p=2):
+    """Lens PCA method adapted from Luis's code.
+
+    Performs a PCA type reduction in lens spaces :math:`L^n_p`. The
+    construction is given in detail in [1]_. Primarily used here as a
+    means of computing an initial guess for lens MDS. Because LPCA is
+    inherently linear it sometimes fails to preserve topological
+    structure that MDS can recover.
+
     Parameters
     ----------
-    dim: int
-        Patches will be dim x dim
-    NAngles: int
-        Number of angles to sweep between 0 and pi
-    NOffsets: int
-        Number of offsets to sweep from the origin to the edge of the patch
-    sigma: float
-        The blur parameter.  Higher sigma is more blur
+    X : ndarray (d * n)
+        Data matrix. Each column is a data point on the d-1 sphere.
+    dim : int
+        Dimension onto which to reduce data. Here dimension is that of
+        the sphere, so the returned matrix has ``dim+1`` rows.
+    p : int
+        Cyclic group to use in the lens space.
+
+    Returns
+    -------
+    Y : ndarray (dim+1 * n)
+        Output data matrix from Lens PCA algorithm. Each column is a
+        data point on the dim-sphere.
+
+    Notes
+    -----
+    When ``p == 2``, this should be identical to PPCA.
+
+    References
+    ----------
+    .. [1] J. Perea and L. Polanco, "Coordinatizing Data with Lens
+        Spaces and Persistent Cohomology," arXiv:1905:00350,
+        https://arxiv.org/abs/1905.00350
+
     """
 
-    N = NAngles*NOffsets
-    P = np.zeros((N, dim*dim))
-    thetas = np.linspace(0, np.pi, NAngles+1)[0:NAngles]
-    ps = np.linspace(-1, 1, NOffsets)
-    idx = 0
-    [Y, X] = np.meshgrid(np.linspace(-0.5, 0.5, dim), np.linspace(-0.5, 0.5, dim))
-    for i in range(NAngles):
-        c = np.cos(thetas[i])
-        s = np.sin(thetas[i])
-        for j in range(NOffsets):
-            patch = X*c + Y*s + ps[j]
-            patch = np.exp(-patch**2/sigma**2)
-            P[idx, :] = patch.flatten()
-            idx += 1
-    return P
+    Xcplx = X[0::2] + 1j*X[1::2]
+    CovX = Xcplx@Xcplx.conj().T
+    l,V = LA.eigh(CovX)   # CovX is hermitian, so best to use eigh.
+    n = V.shape[0]
+    
+
+
+
+
