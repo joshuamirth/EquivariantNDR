@@ -298,13 +298,36 @@ def lpca(X,dim,p=2):
     n = V.shape[0]
     
 # Utility methods for LPCA.
-def last_lens_component(Y):
+def lens_components(Y):
+    """Best low-dimensional lens-space representation for dataset Y.
+
+    Parameters
+    ----------
+    Y : ndarray (d*n)
+        Set of data on sphere with each column a data point. Y must be
+        complex, with each column having unit norm.
+
+    Returns
+    -------
+    V : ndarray (d*d)
+        Basis corresponding to optimal projection. Vectors are sorted
+        corresponding to the amount of variance captured by lens-space
+        projection onto the corresponding subspace. The first k vectors
+        thus correspond to the optimal k-dimensional representation.
+
+    """
+
     evals, evecs = LA.eigh(Y@Y.conj().T)
-    V = evecs[:,-1]
-    U = evecs[:,0:-1]
+    V = evecs[:,-1]     # With eigh last eigenvector ~ smallest eigenvalue.
+    U = evecs[:,0:-1]   # Remaining eigenvecs form ON basis for ortho-comp.
     for i in range(evecs.shape[0]):
         UY = U.conj().T@Y
         UY = UY/np.linalg.norm(UY,axis=0)
+        evals, evecs = LA.eigh(UY@UY.conj().T)
+        Vk = UY@evecs[:,-1]
+        V = np.hcat((Vk,V))
+        U = evecs[:,0:-1]
+    return V
     
 
 
