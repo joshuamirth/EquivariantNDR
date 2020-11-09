@@ -297,7 +297,14 @@ def lpca(X,dim,p=2):
     l,V = LA.eigh(CovX)   # CovX is hermitian, so best to use eigh.
     n = V.shape[0]
     
-
-
+# Utility methods for LPCA.
+def last_lens_component(Y):
+    evals, evecs = LA.eigh(Y@Y.conj().T)
+    V = evecs[:,-1]
+    U = evecs[:,0:-1]
+    for i in range(evecs.shape[0]):
+        UY = U.conj().T@Y
+        UY = UY/np.linalg.norm(UY,axis=0)
+    
 
 
