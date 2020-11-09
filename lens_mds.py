@@ -293,10 +293,9 @@ def lpca(X,dim,p=2):
     """
 
     Xcplx = X[0::2] + 1j*X[1::2]
-    CovX = Xcplx@Xcplx.conj().T
-    l,V = LA.eigh(CovX)   # CovX is hermitian, so best to use eigh.
-    n = V.shape[0]
-    
+    principal_comps = lens_components(Xplx)
+    principal_coords = principal_comps.conj().T@Xcplx
+        
 # Utility methods for LPCA.
 def lens_components(Y):
     """Best low-dimensional lens-space representation for dataset Y.
@@ -318,14 +317,16 @@ def lens_components(Y):
     """
 
     evals, evecs = LA.eigh(Y@Y.conj().T)
+    d = evecs.shape[0]
     V = evecs[:,-1]     # With eigh last eigenvector ~ smallest eigenvalue.
+    V = np.reshape(V,(d,1))
     U = evecs[:,0:-1]   # Remaining eigenvecs form ON basis for ortho-comp.
-    for i in range(evecs.shape[0]):
+    for i in range(1,d):
         UY = U.conj().T@Y
         UY = UY/np.linalg.norm(UY,axis=0)
         evals, evecs = LA.eigh(UY@UY.conj().T)
-        Vk = UY@evecs[:,-1]
-        V = np.hcat((Vk,V))
+        Vk = np.reshape(U@evecs[:,-1],(d,1))
+        V = np.hstack((Vk,V))
         U = evecs[:,0:-1]
     return V
     
