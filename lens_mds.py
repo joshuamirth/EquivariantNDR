@@ -267,10 +267,13 @@ def lpca(X,dim,p=2):
     Parameters
     ----------
     X : ndarray (d * n)
-        Data matrix. Each column is a data point on the d-1 sphere.
+        Matrix of data on an odd-dimensional sphere. May either be given
+        as a complex matrix with unit-norm columns or as a real matrix
+        with unit norm columns. In the latter case `d` must be even.
     dim : int
         Dimension onto which to reduce data. Here dimension is that of
-        the sphere, so the returned matrix has ``dim+1`` rows.
+        the sphere, so the returned matrix has ``dim+1`` rows. Must be
+        odd.
     p : int
         Cyclic group to use in the lens space.
 
@@ -278,11 +281,17 @@ def lpca(X,dim,p=2):
     -------
     Y : ndarray (dim+1 * n)
         Output data matrix from Lens PCA algorithm. Each column is a
-        data point on the dim-sphere.
+        data point on the dim-sphere as a subset of C^(dim+1). `Y` will
+        be a complex matrix.
 
     Notes
     -----
     When ``p == 2``, this should be identical to PPCA.
+
+    Examples
+    --------
+    
+
 
     References
     ----------
@@ -293,7 +302,8 @@ def lpca(X,dim,p=2):
     """
 
     Xcplx = X[0::2] + 1j*X[1::2]
-    principal_comps = lens_components(Xplx)
+    V = lens_components(Xplx)
+    # TODO: consider adding variance captured as a second return value.
     principal_coords = principal_comps.conj().T@Xcplx
         
 # Utility methods for LPCA.
@@ -316,8 +326,6 @@ def lens_components(Y):
 
     """
 
-    # TODO: consider adding variance captured as a second return value.
-
     # Initialize:
     #   Vn = smallest eigenvec of Y@Y.†
     #   U = remaining evecs (which form ON basis for Vn¬)
@@ -334,54 +342,73 @@ def lens_components(Y):
     V = np.reshape(V,(-1,1))
     U = evecs[:,0:-1]   # Remaining eigenvecs form ON basis for perp space.
     # Loop:
-    for k in range(d-1,1,-1):
+    for k in range(d-1,0,-1):
         UY = U.conj().T@Y
         UY = UY/LA.norm(UY,axis=0)
-        evals, evecs = LA.eigh(UY@UY.conj().T)
-        Vk = U@evecs[:,-1]
+        tmp_evals, tmp_evecs = LA.eigh(UY@UY.conj().T)
+        Vk = U@tmp_evecs[:,-1]
         Vk = np.reshape(Vk,(-1,1))
         V = np.hstack((Vk,V))
         U = ONperp(V)
+    return V
 
 def ONperp(V):
     """Find an orthonormal basis for orthogonal complement of subspace.
 
-    Take a basis `V` for a subspace of :math:`\mathbb{C}^n` and find an
+    Takes a basis `V` for a subspace of :math:`\mathbb{C}^d` and find an
     orthonormal basis for its orthogonal complement.
 
-
-
-    print(U.shape)
-    print(Y.shape)
-    for i in range(1,d):
-        UY = U.conj().T@Y
-        print(i)
-        print(UY.shape)
-        UY = UY/np.linalg.norm(UY,axis=0)
-        evals, evecs = LA.eigh(UY@UY.conj().T)
-        Vk = np.reshape(U@evecs[:,-1],(d,1))
-        V = np.hstack((Vk,V))
-        U = evecs[:,0:-1]
-        print(U.shape)
-    return V
+    Parameters
+    ----------
+    V : ndarray (d*k)
+        Vectors forming a basis for a k-dimensional subspace. Columns of
+        `V` must be linearly independent (and thus k < d).
     
-def rotM(a):
-    a = np.reshape(a, (-1,1)) 
-    n = len(a)
-    a = a / np.sqrt(np.real(np.vdot(a,a)))
+    Returns
+    -------
+    U : ndarray (d*(d-k))
+        Vectors forming a basis for the perp-space of `V`. Each column
+        of `U` is orthogonal to each vector in `V` and each other column
+        of `U`. If `V` has unit-norm columns, then [U,V] is orthonormal.
+        If `V` is complex, then `U` is orthogonal to `V` with respect to
+        the complex inner product.
 
-    b = np.zeros(n)
-    b[-1] = 1
-    b = np.reshape(b, (-1,1))
+    Notes
+    -----
 
-    c = a - (np.transpose(np.conj(b))@a)*b
+    A vector `u` is orthogonal to each column of `V` iff ``V.T@u = 0``.
+    Thus a basis for the orthogonal complement of `V` is a basis for the
+    nullspace of `V.T`, which is given by the eigenvector corresponding
+    to eigenvalue zero.
 
-    if np.sqrt(np.vdot(c,c)) < 1e-15:
-        rot = np.conj(np.transpose(np.conj(b))@a)*np.ones((n,n))
-    else:
-        c = c / np.sqrt(np.real(np.vdot(c,c)))
-        l = b.conj().T@a
-        beta = np.sqrt(1 - np.vdot(l,l))
-        rot = np.eye(n) - (1-l)*(c@c.conj().T) - (1-l.conj())*(b@b.conj().T) + beta*(b@c.conj().T) - c@b.conj().T
-    return rot
+    Examples
+    --------
+    >>> V = np.array([[1,0,],[0,0,],[0,1]])
+    >>> lens_mds.ONperp(V)
+    array([[ 0.],
+       [-1.],
+       [ 0.]])
+
+    Note that the result may differ by a sign from the expected value.
+
+    >>> V = np.random.rand(4,2)
+    >>> U = lens_mds.ONperp(V)
+    >>> np.allclose(U.T@V, np.zeros((2,2)))
+    True
+
+    `U` is orthogonal to `V`.
+
+    >>> V = np.random.rand(4,2)
+    >>> V = V/np.linalg.norm(V,axis=0)
+    >>> B = np.hstack((lens_mds.ONperp(V),V))
+    >>> np.allclose(B.T@B,np.eye(4))
+    True
+
+    """
+
+    d = V.shape[0]
+    k = V.shape[1]
+    U,_,_ = LA.svd(V)
+    U = U[:,k:d]
+    return U
 
