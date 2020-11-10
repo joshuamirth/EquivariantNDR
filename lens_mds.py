@@ -255,7 +255,7 @@ def get_blurred_masks(Y,omega,p,D):
     M = np.nan_to_num(M/sum(M),nan=1.0)
     return M
 
-def lpca(X,dim,p=2):
+def lpca(X,k,p=2):
     """Lens PCA method adapted from Luis's code.
 
     Performs a PCA type reduction in lens spaces :math:`L^n_p`. The
@@ -270,19 +270,20 @@ def lpca(X,dim,p=2):
         Matrix of data on an odd-dimensional sphere. May either be given
         as a complex matrix with unit-norm columns or as a real matrix
         with unit norm columns. In the latter case `d` must be even.
-    dim : int
-        Dimension onto which to reduce data. Here dimension is that of
-        the sphere, so the returned matrix has ``dim+1`` rows. Must be
-        odd.
+    k : int
+        Complex dimension into which to reduce data. Thus the output
+        lives on a quotient of the `k-1`-sphere in C^k. Must be less
+        than the dimension of the original matrix, so `k < d`.
     p : int
         Cyclic group to use in the lens space.
 
     Returns
     -------
-    Y : ndarray (dim+1 * n)
+    Y : ndarray (k * n)
         Output data matrix from Lens PCA algorithm. Each column is a
-        data point on the dim-sphere as a subset of C^(dim+1). `Y` will
-        be a complex matrix.
+        data point on the `(k-1)`-sphere as a subset of C^(k). `Y` will
+        be a complex matrix if the input is complex, and a real matrix
+        if the input is real.
 
     Notes
     -----
@@ -291,7 +292,9 @@ def lpca(X,dim,p=2):
     Examples
     --------
     
-
+    >>> X = numpy.random.rand(6,8)
+    >>> Xcplx = Y[0::2] + 1j*Y[1::2]
+    >>> Y = lens_mds.lpca(Xcplx,2,3)
 
     References
     ----------
@@ -301,10 +304,19 @@ def lpca(X,dim,p=2):
 
     """
 
-    Xcplx = X[0::2] + 1j*X[1::2]
-    V = lens_components(Xplx)
+    isreal = np.isrealobj(X)
+    if isreal:
+        if X.shape[0]%2 != 0:
+            raise ValueError('X must be complex or have an even number '\
+                'of real dimensions.')
+        else:
+            X = X[0::2] + 1j*X[1::2]
+    V = lens_components(X)
+    Y = V[:,0:k].conj().T@X
+    Y = Y/LA.norm(Y,axis=0)
+    # TODO: return real output when input is real.
     # TODO: consider adding variance captured as a second return value.
-    principal_coords = principal_comps.conj().T@Xcplx
+    return Y
         
 # Utility methods for LPCA.
 def lens_components(Y):
