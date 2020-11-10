@@ -4,12 +4,12 @@ import autograd.numpy as np
 import autograd.numpy.linalg as LA
 from autograd.numpy.linalg import matrix_power as mp
 
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import floyd_warshall
+
 import pymanopt
 from pymanopt.solvers import *
 from pymanopt.manifolds import Oblique
-
-import matplotlib.pyplot as plt
-import random
 
 # dreimac does not install properly on my system.
 try:
@@ -20,12 +20,198 @@ except:
         the published version""")
 
 ###############################################################################
-# Main Algorithm
+# Main Algorithms
 ###############################################################################
 
-def emds(
-    X,
+def pmds(
     D,
+    X=None,
+    dim=3,
+    max_iter=20,
+    convergence_tol=1e-4
+    verbosity=1,
+    autograd=False
+    pmo_solve='cg'
+):
+    """MDS on projective space.
+
+    Detailed description in career grant, pages 6-7 (method 1).
+
+    Parameters
+    ----------
+    D : ndarray
+        Square distance matrix determining cost.
+    X : ndarray, optional
+        Initial guess of points in RP^k. Result will lie on RP^k for
+        same k as the initial guess. If no initial guess is provided an
+        initial guess is automatically generated. Providing an initial
+        guess generally produces better results.
+    dim : int, optional
+        Dimension (of ambient Euclidean space) to reduce into. This is
+        one greater than the dimension of projective space, so `dim==3`
+        will give the reduction onto :math:`\mathbb{R}P^2`. Default is
+        3. Overridden by rank of `X` if `X` is supplied.
+    max_iter : int, optional
+        Maximum number of times to iterate the optimization loop.
+        Default is 20.
+    convergence_tol : float, optional
+        Minimum decrease in strain for which to continue with iterations.
+        Default is 1e-4.
+    verbosity : int, optional
+        If positive, print output relating to convergence conditions at each
+        iteration.
+    solve_prog : string, optional
+        Choice of algorithm for low-rank correlation matrix reduction.
+        Options are "pymanopt" or "matlab", default is "pymanopt".
+
+    Returns
+    -------
+    X : ndarray
+        Optimal configuration of points in RP^k.
+    C : list
+        List of costs at each iteration.
+
+    """
+
+    num_points = D.shape[0]
+    if X is not None:
+        dim = LA.matrix_rank(X)
+    else:
+        # TODO: implement a simple way of getting points on sphere.
+    if verbosity > 0:
+        print('Finding projection onto RP^%i.' %(dim-1))
+    W = distance_to_weights(D)
+    S = np.sign(X@X.T)
+    C = S*np.cos(D)
+    if np.sum(S == 0) > 0:
+        print('Warning: Some initial guess vectors are orthogonal, this may ' +
+            'cause issues with convergence.')
+    cost = setup_cost(D,S)
+    cost_list = [cost(X.T)]
+    true_cost = setup_cost(projective_distance_matrix(X),S)
+    true_cost_list = [true_cost(X.T)]
+    manifold = Oblique(dim,num_points) # Short, wide matrices.
+    if pmo_solve == 'nm':
+        solver = NelderMead()
+    if pmo_solve == 'ps':
+        solver = ParticleSwarm()
+    if pmo_solve == 'tr':
+        solver = TrustRegions()
+    if pmo_solve == 'sd':
+        solver = SteepestDescent()
+    else:
+        solver = ConjugateGradient()
+    for i in range(0,max_iter):
+        if autograd:
+            cost = setup_cost(D,S)
+            problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)
+        else:
+            cost, egrad, ehess = setup_cost(D,S,return_derivatives=True)
+            problem = pymanopt.Problem(manifold, cost, egrad=egrad, ehess=ehess, verbosity=verbosity)
+        if pmo_solve == 'cg' or pmo_solve == 'sd' or pmo_solve == 'tr':
+            # Use initial condition with gradient-based solvers.
+            X_new = solver.solve(problem,x=X.T)
+        else:
+            X_new =  solver.solve(problem)
+        X_new = X_new.T     # X should be tall-skinny
+        cost_oldS = cost(X_new.T)
+        cost_list.append(cost_oldS)
+        S_new = np.sign(X_new@X_new.T)
+        C_new = S_new*np.cos(D)
+        cost_new = setup_cost(D,S_new)
+        cost_newS = cost_new(X_new.T)
+        S_diff = ((LA.norm(S_new - S))**2)/4
+        percent_S_diff = 100*S_diff/S_new.size
+        percent_cost_diff = 100*(cost_list[i] - cost_list[i+1])/cost_list[i]
+        true_cost = setup_cost(projective_distance_matrix(X),S)
+        true_cost_list.append(true_cost(X_new.T))
+        if verbosity > 0:
+            print('Through %i iterations:' %(i+1))
+            print('\tTrue cost: %2.2f' %true_cost(X_new.T))
+            print('\tComputed cost: %2.2f' %cost_list[i+1])
+            print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
+            print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
+            print('\tComputed cost with new S: %2.2f' %cost_newS)
+            print('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)))
+        if S_diff < 1:
+            print('No change in S matrix. Stopping iterations')
+            break
+        if percent_cost_diff < .0001:
+            print('No significant cost improvement. Stopping iterations.')
+            break
+        if i == max_iter:
+            print('Maximum iterations reached.')
+        # Update variables:
+        X = X_new
+        C = C_new
+        S = S_new
+    return X, cost_list, true_cost_list
+
+def lmds(
+    D,
+    X=None
+    max_iter=20,
+    verbosity=1,
+    autograd=False
+    pmo_solve='cg'
+
+):
+    """MDS on lens spaces."""
+
+def gmds(
+    D,
+    X=None
+    max_iter=20,
+    verbosity=1,
+    autograd=False
+    pmo_solve='cg'
+):
+    """MDS on Grassmannians."""
+
+###############################################################################
+# Utility methods.
+###############################################################################
+
+def projective_cost():
+def lens_cost():
+def grassmannian_cost():
+
+# General:
+def acos_validate():
+def distance_to_weights():
+
+# For projective:
+# TODO: determine if this is actually needed when using pymanopt.
+def cholesky_rep():
+
+# For lens:
+def g_action_matrix():
+def optimal_rotation():
+def get_masks():
+# TODO: could probably merge optimal_rotation get_masks into single,
+# more efficient, function.
+
+# For grassmannian:
+
+###############################################################################
+# Initialization methods.
+###############################################################################
+
+# TODO: determine if these can just be imported from elsewhere.
+def ppca():
+def lpca():
+def gpca():
+
+def geodesic_distance_matrix():
+
+def initial_guess():
+
+
+
+# TODO: don't write a general algorithm - there's too many differences.
+def emds(
+    D,
+    X,
     q=1,
     max_iter=20,
     verbosity=1,
