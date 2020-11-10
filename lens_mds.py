@@ -316,19 +316,72 @@ def lens_components(Y):
 
     """
 
+    # TODO: consider adding variance captured as a second return value.
+
+    # Initialize:
+    #   Vn = smallest eigenvec of Y@Y.†
+    #   U = remaining evecs (which form ON basis for Vn¬)
+    # Loop:
+    #   V{n-1} = U@(smallest evec of U†Y, normalized)
+    #   U = ON basis for (V{n-1},Vn)¬
+    # Finish:
+    #   V1 = last vector for ON basis
+
+    # Initialize:
     evals, evecs = LA.eigh(Y@Y.conj().T)
     d = evecs.shape[0]
     V = evecs[:,-1]     # With eigh last eigenvector ~ smallest eigenvalue.
-    V = np.reshape(V,(d,1))
-    U = evecs[:,0:-1]   # Remaining eigenvecs form ON basis for ortho-comp.
+    V = np.reshape(V,(-1,1))
+    U = evecs[:,0:-1]   # Remaining eigenvecs form ON basis for perp space.
+    # Loop:
+    for k in range(d-1,1,-1):
+        UY = U.conj().T@Y
+        UY = UY/LA.norm(UY,axis=0)
+        evals, evecs = LA.eigh(UY@UY.conj().T)
+        Vk = U@evecs[:,-1]
+        Vk = np.reshape(Vk,(-1,1))
+        V = np.hstack((Vk,V))
+        U = ONperp(V)
+
+def ONperp(V):
+    """Find an orthonormal basis for orthogonal complement of subspace.
+
+    Take a basis `V` for a subspace of :math:`\mathbb{C}^n` and find an
+    orthonormal basis for its orthogonal complement.
+
+
+
+    print(U.shape)
+    print(Y.shape)
     for i in range(1,d):
         UY = U.conj().T@Y
+        print(i)
+        print(UY.shape)
         UY = UY/np.linalg.norm(UY,axis=0)
         evals, evecs = LA.eigh(UY@UY.conj().T)
         Vk = np.reshape(U@evecs[:,-1],(d,1))
         V = np.hstack((Vk,V))
         U = evecs[:,0:-1]
+        print(U.shape)
     return V
     
+def rotM(a):
+    a = np.reshape(a, (-1,1)) 
+    n = len(a)
+    a = a / np.sqrt(np.real(np.vdot(a,a)))
 
+    b = np.zeros(n)
+    b[-1] = 1
+    b = np.reshape(b, (-1,1))
+
+    c = a - (np.transpose(np.conj(b))@a)*b
+
+    if np.sqrt(np.vdot(c,c)) < 1e-15:
+        rot = np.conj(np.transpose(np.conj(b))@a)*np.ones((n,n))
+    else:
+        c = c / np.sqrt(np.real(np.vdot(c,c)))
+        l = b.conj().T@a
+        beta = np.sqrt(1 - np.vdot(l,l))
+        rot = np.eye(n) - (1-l)*(c@c.conj().T) - (1-l.conj())*(b@b.conj().T) + beta*(b@c.conj().T) - c@b.conj().T
+    return rot
 
