@@ -6,6 +6,13 @@ import matplotlib.pyplot as plt
 import pymanopt
 from pymanopt.solvers import *
 from pymanopt.manifolds import Oblique
+# dreimac does not install properly on my system.
+try:
+    from dreimac.projectivecoords import ppca
+except:
+    from ppca import ppca
+    print('Loading personal version of PPCA. This may not be consistent with '\
+        'the published version.')
 
 def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True,appx=False):
     """Lens multi-dimensional scaling algorithm.
@@ -255,33 +262,172 @@ def get_blurred_masks(Y,omega,p,D):
     M = np.nan_to_num(M/sum(M),nan=1.0)
     return M
 
-def get_crossed_line_patches(dim, NAngles, NOffsets, sigma):
-    """
-    Sample a set of line segments, as witnessed by square patches
+def lpca(X,k,p=2):
+    """Lens PCA method adapted from Luis's code.
+
+    Performs a PCA type reduction in lens spaces :math:`L^n_p`. The
+    construction is given in detail in [1]_. Primarily used here as a
+    means of computing an initial guess for lens MDS. Because LPCA is
+    inherently linear it sometimes fails to preserve topological
+    structure that MDS can recover.
+
     Parameters
     ----------
-    dim: int
-        Patches will be dim x dim
-    NAngles: int
-        Number of angles to sweep between 0 and pi
-    NOffsets: int
-        Number of offsets to sweep from the origin to the edge of the patch
-    sigma: float
-        The blur parameter.  Higher sigma is more blur
+    X : ndarray (d * n)
+        Matrix of data on an odd-dimensional sphere. May either be given
+        as a complex matrix with unit-norm columns or as a real matrix
+        with unit norm columns. In the latter case `d` must be even.
+    k : int
+        Complex dimension into which to reduce data. Thus the output
+        lives on a quotient of the `k-1`-sphere in C^k. Must be less
+        than the dimension of the original matrix, so `k < d`.
+    p : int
+        Cyclic group to use in the lens space.
+
+    Returns
+    -------
+    Y : ndarray (k * n)
+        Output data matrix from Lens PCA algorithm. Each column is a
+        data point on the `(k-1)`-sphere as a subset of C^(k). `Y` will
+        be a complex matrix if the input is complex, and a real matrix
+        if the input is real.
+
+    Notes
+    -----
+    When ``p == 2``, this should be identical to PPCA.
+
+    Examples
+    --------
+    
+    >>> X = numpy.random.rand(6,8)
+    >>> Xcplx = Y[0::2] + 1j*Y[1::2]
+    >>> Y = lens_mds.lpca(Xcplx,2,3)
+
+    References
+    ----------
+    .. [1] J. Perea and L. Polanco, "Coordinatizing Data with Lens
+        Spaces and Persistent Cohomology," arXiv:1905:00350,
+        https://arxiv.org/abs/1905.00350
+
     """
 
-    N = NAngles*NOffsets
-    P = np.zeros((N, dim*dim))
-    thetas = np.linspace(0, np.pi, NAngles+1)[0:NAngles]
-    ps = np.linspace(-1, 1, NOffsets)
-    idx = 0
-    [Y, X] = np.meshgrid(np.linspace(-0.5, 0.5, dim), np.linspace(-0.5, 0.5, dim))
-    for i in range(NAngles):
-        c = np.cos(thetas[i])
-        s = np.sin(thetas[i])
-        for j in range(NOffsets):
-            patch = X*c + Y*s + ps[j]
-            patch = np.exp(-patch**2/sigma**2)
-            P[idx, :] = patch.flatten()
-            idx += 1
-    return P
+    isreal = np.isrealobj(X)
+    if isreal:
+        if X.shape[0]%2 != 0:
+            raise ValueError('X must be complex or have an even number '\
+                'of real dimensions.')
+        else:
+            X = X[0::2] + 1j*X[1::2]
+    V = lens_components(X)
+    Y = V[:,0:k].conj().T@X
+    Y = Y/LA.norm(Y,axis=0)
+    # TODO: return real output when input is real.
+    # TODO: consider adding variance captured as a second return value.
+    return Y
+        
+# Utility methods for LPCA.
+def lens_components(Y):
+    """Best low-dimensional lens-space representation for dataset Y.
+
+    Parameters
+    ----------
+    Y : ndarray (d*n)
+        Set of data on sphere with each column a data point. Y must be
+        complex, with each column having unit norm.
+
+    Returns
+    -------
+    V : ndarray (d*d)
+        Basis corresponding to optimal projection. Vectors are sorted
+        corresponding to the amount of variance captured by lens-space
+        projection onto the corresponding subspace. The first k vectors
+        thus correspond to the optimal k-dimensional representation.
+
+    """
+
+    # Initialize:
+    #   Vn = smallest eigenvec of Y@Y.†
+    #   U = remaining evecs (which form ON basis for Vn¬)
+    # Loop:
+    #   V{n-1} = U@(smallest evec of U†Y, normalized)
+    #   U = ON basis for (V{n-1},Vn)¬
+    # Finish:
+    #   V1 = last vector for ON basis
+
+    # Initialize:
+    evals, evecs = LA.eigh(Y@Y.conj().T)
+    d = evecs.shape[0]
+    V = evecs[:,-1]     # With eigh last eigenvector ~ smallest eigenvalue.
+    V = np.reshape(V,(-1,1))
+    U = evecs[:,0:-1]   # Remaining eigenvecs form ON basis for perp space.
+    # Loop:
+    for k in range(d-1,0,-1):
+        UY = U.conj().T@Y
+        UY = UY/LA.norm(UY,axis=0)
+        tmp_evals, tmp_evecs = LA.eigh(UY@UY.conj().T)
+        Vk = U@tmp_evecs[:,-1]
+        Vk = np.reshape(Vk,(-1,1))
+        V = np.hstack((Vk,V))
+        U = ONperp(V)
+    return V
+
+def ONperp(V):
+    """Find an orthonormal basis for orthogonal complement of subspace.
+
+    Takes a basis `V` for a subspace of :math:`\mathbb{C}^d` and find an
+    orthonormal basis for its orthogonal complement.
+
+    Parameters
+    ----------
+    V : ndarray (d*k)
+        Vectors forming a basis for a k-dimensional subspace. Columns of
+        `V` must be linearly independent (and thus k < d).
+    
+    Returns
+    -------
+    U : ndarray (d*(d-k))
+        Vectors forming a basis for the perp-space of `V`. Each column
+        of `U` is orthogonal to each vector in `V` and each other column
+        of `U`. If `V` has unit-norm columns, then [U,V] is orthonormal.
+        If `V` is complex, then `U` is orthogonal to `V` with respect to
+        the complex inner product.
+
+    Notes
+    -----
+
+    A vector `u` is orthogonal to each column of `V` iff ``V.T@u = 0``.
+    Thus a basis for the orthogonal complement of `V` is a basis for the
+    nullspace of `V.T`, which is given by the eigenvector corresponding
+    to eigenvalue zero.
+
+    Examples
+    --------
+    >>> V = np.array([[1,0,],[0,0,],[0,1]])
+    >>> lens_mds.ONperp(V)
+    array([[ 0.],
+       [-1.],
+       [ 0.]])
+
+    Note that the result may differ by a sign from the expected value.
+
+    >>> V = np.random.rand(4,2)
+    >>> U = lens_mds.ONperp(V)
+    >>> np.allclose(U.T@V, np.zeros((2,2)))
+    True
+
+    `U` is orthogonal to `V`.
+
+    >>> V = np.random.rand(4,2)
+    >>> V = V/np.linalg.norm(V,axis=0)
+    >>> B = np.hstack((lens_mds.ONperp(V),V))
+    >>> np.allclose(B.T@B,np.eye(4))
+    True
+
+    """
+
+    d = V.shape[0]
+    k = V.shape[1]
+    U,_,_ = LA.svd(V)
+    U = U[:,k:d]
+    return U
+
