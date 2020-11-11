@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import pymanopt
 from pymanopt.solvers import *
 from pymanopt.manifolds import Oblique
+
+from ripser import ripser   # For classifying maps.
+
 # dreimac does not install properly on my system.
 try:
     from dreimac.projectivecoords import ppca
@@ -430,4 +433,15 @@ def ONperp(V):
     U,_,_ = LA.svd(V)
     U = U[:,k:d]
     return U
+
+def classifying_map(D,q=2):
+    """ Use persistent homology to build classifying map into lens space."""
+    PH = ripser(D,coeff=q,do_cocycles=True,distance_matrix=True,maxdim=2)
+    # (We are only interested in one-dimensional homology.)
+    cocyles = PH['cocycles'][1]
+    diagram = PH['dgms'][1]
+    persistence = diagram[:,1] - diagonal[:,0]  # death - birth
+    sort_indices = persistence.argsort()    # sort order from least to most persistent class.
+    eta = cocyles[sort_indices[-1]] # most persistent class
+
 
