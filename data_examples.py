@@ -175,7 +175,9 @@ def line_patches(dim, NAngles=10, NOffsets=10, sigma=0.25,cross=False):
             if cross:
                 xpatch = X*c - Y*s + ps[j]
                 xpatch = np.exp(-xpatch**2/sigma**2)
-                patch = (patch + xpatch)/2
+                # TODO: determine if max or + is better model.
+                #patch = (patch + xpatch)/2
+                patch = np.maximum(patch,xpatch)
             P[idx, :] = patch.flatten()
             idx += 1
     P = P.T
