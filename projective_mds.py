@@ -20,8 +20,8 @@ try:
     from dreimac.projectivecoords import ppca
 except:
     from ppca import ppca
-    print("""Loading personal version of PPCA. This may not be consistent with
-        the published version""")
+    print('Loading personal version of PPCA. This may not be consistent with '\
+        'the published version.')
 
 #def circleDM(n=50,diam=1.57):
 #    """Distance matrix for 2n evenly spaced circle points."""
