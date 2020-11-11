@@ -215,24 +215,28 @@ def cholesky_rep(X):
     C = np.tril(X@Q)    # The matrix is lower-triangular, but apply tril
     return C            # to handle floating-point errors.
 
-def graph_distance_matrix(data,epsilon=0.4,k=-1):
-    """Construct a geodesic distance matrix from data in RP^n.
+def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
+    """Approximate a geodesic distance matrix.
 
-    Given a point cloud of data in RP^n, uses either an epsilon
-    neighborhood or a k-NN algorithm to find nearby points, then builds
-    a distance matrix such that nearby points have their ambient
-    distance, while far away points are given the shortest path distance
-    in the graph.
+    Given a distance matrix uses either an epsilon neighborhood or a
+    k-NN algorithm to find nearby points, then builds a distance matrix
+    such that nearby points have their ambient distance as defined by
+    the original distance matrix, while far away points are given the
+    shortest path distance in the graph.
     
     Parameters
     ----------
-    data : ndarray
-        Data as an n*2 matrix, assumed to lie on RP^n (i.e. S^n).
+    D : ndarray (n*n)
+        Distance matrix to convert to an approximation of the geodesic
+        distance matrix.
     epsilon : float, optional
         Radius of neighborhood when constructing graph. Default is ~pi/8.
     k : int, optional
         Number of nearest neighbors in k-NN graph. Default is -1 (i.e.
         use epsilon neighborhoods).
+    normalize : bool, optional 
+        Normalize the output distance matrix `Dhat` so that the maximum
+        distance is the same as in the original. Default is True.
 
     Returns
     -------
@@ -251,9 +255,6 @@ def graph_distance_matrix(data,epsilon=0.4,k=-1):
 
     """
 
-    M = np.abs(data@data.T)
-    acos_validate(M)
-    D = np.arccos(M)    # Initial distance matrix
     # Use kNN. Sort twice to get nearest neighbour list.
     if k > 0:
         D_sort = np.argsort(np.argsort(D))
