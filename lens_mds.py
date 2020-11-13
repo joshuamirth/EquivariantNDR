@@ -6,6 +6,13 @@ import matplotlib.pyplot as plt
 import pymanopt
 from pymanopt.solvers import *
 from pymanopt.manifolds import Oblique
+# dreimac does not install properly on my system.
+try:
+    from dreimac.projectivecoords import ppca
+except:
+    from ppca import ppca
+    print('Loading personal version of PPCA. This may not be consistent with '\
+        'the published version.')
 
 def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True,appx=False):
     """Lens multi-dimensional scaling algorithm.
