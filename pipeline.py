@@ -2,11 +2,9 @@
     dimensionality reduction."""
 
 import numpy as np
-import scipy as sp
 from ripser import ripser
-from persim import plot_diagrams
 
-def prominent_cocycle(D,q=2,epsilon=1e-3):
+def prominent_cocycle(D,q=2,epsilon=1e-3,return_persistence=False):
     """Primary cocycle from H_1 persistence for lens coordinate
     representation.
 
@@ -27,6 +25,8 @@ def prominent_cocycle(D,q=2,epsilon=1e-3):
         Default is 2.
     epsilon : Tolerance for covering radius. Default is 0.001. The
         persistent cocycle must die after 2*birth + epsilon to be valid.
+    return_persistence : bool
+        Set true to return the ripser output.
     # TODO: understand exactly what epsilon does.
 
     Returns
@@ -38,32 +38,54 @@ def prominent_cocycle(D,q=2,epsilon=1e-3):
         Whether the cohomology class if persistent enough to produce a
         valid classifying map. If false the data may lack any H_1
         cocycles or a different coefficient field may be required.
+    persistence : dict, optional
+        Full output from Ripser. Only returned if `return_persistence`
+        is set.
         
+    Examples
+    --------
+    The simple "house" simplicial complex has a cocyce.
+    >>> D = np.array([
+            [0. , 1. , 1.414 , 1. , 0.7],
+            [1. , 0. , 1. , 1.414 , 1.5],
+            [1.414. , 1. , 0. , 1. , 1.5],
+            [1. , 1.414 , 1. , 0. , 0.7],
+            [0.7, 1.5, 1.5, 0.7, 0. ]])
+    >>> prominent_cocycle(D)
+    (array([[1, 0, 1]]), False)
+
+    Because this cocycle is born at `1` and dies at `1.414`, it is not
+    persistent enough to necessarily give a valid class. However, in
+    this case it is in fact a Cech cocycle.
 
     Raises
     ------
-    HomologyError
+    NoHomologyError
         If there are no persistent H_1 cocycles at all.
     
     """
     
-    PH = ripser(D,coeff=q,do_cocycles=True,maxdim=2,distance_matrix=True)
-    cocycles = PH['cocycles'][0]
-    diagram = PH['dgms'][0]
+    PH = ripser(D,coeff=q,do_cocycles=True,maxdim=1,distance_matrix=True)
+    cocycles = PH['cocycles'][1]
+    diagram = PH['dgms'][1]
     persistence = diagram[:,1] - diagram[:,0]
     index = persistence.argsort()[-1] # Longest cycle is last.
     if index > len(cocycles):
-        raise HomologyError('No PH_1 classes found. Either there is no '\
+        raise NoHomologyError('No PH_1 classes found. Either there is no '\
             'persistent homology in dimension 1 when computed with '\
             'Z/%dZ coefficients or the distance matrix was improperly '\
             'specified.' %q)
+    eta = cocycles[index]
     birth = diagram[index,0]
     death = diagram[index,1]
     if death < 2*birth + epsilon:
         valid_class = False
     else:
         valid_class = True
-    return eta, valid_class
+    if return_persistence:
+        return eta, valid_class, birth+epsilon, PH
+    else:
+        return eta, valid_class, birth+epsilon
 
 def partition_unity_jrm(D,radius,landmarks,conical=False):
     """Partition of unity subordinate to open ball cover.
@@ -71,7 +93,7 @@ def partition_unity_jrm(D,radius,landmarks,conical=False):
     Parameters
     ----------
     D : ndarray (n*n)
-        Distance matrix of dataset.
+        Distance matrix of entire dataset.
     radius : float
         Radius of balls to use in open cover of data.
     landmarks : int list (l)
@@ -121,7 +143,7 @@ def partition_unity_jrm(D,radius,landmarks,conical=False):
 def lens_coordinates_jrm(
     partition_function,
     cocycle,
-    p,
+    p
 ):
     """Coordinates of data matrix in lens space.
     
@@ -132,7 +154,7 @@ def lens_coordinates_jrm(
         by a landmark subset. Each of the `d` rows corresponds to the
         function on the open ball around a landmark, where the `i`-th
         entry is the value of that function on the `i`-th data point.
-    cocycle : ndarray (l*3)
+    cocycle : ndarray (d*3)
         Cocycle representing choice of persistent H_1 class. The first
         two columns give the simplices as pairs [i,j]. The third column
         is the value in :math:`\mathbb{Z}_p` corresponding to each
@@ -176,10 +198,11 @@ def lens_coordinates_jrm(
     X = np.zeros((d,N),dtype=complex) # set to complex to avoid unsafe cast.
     for i in range(d):
         tmp_eta = np.zeros(d)
-        idx = np.where(cocycle[:,0]==i)
+        idx = np.where(cocycle[:,0]==i)[0]
+        tmp_eta[cocycle[idx,1]] = cocycle[idx,2]
         # TODO: double check that cocycles from ripser come sorted in the
         # second column, otherwise need to implement that here.
-        tmp_eta[idx] = cocycle[:,2][idx]
+        # tmp_eta[idx] = cocycle[:,2][idx]
         zeta_i = zeta**tmp_eta
         for k in range(N):
             if partition_function[i,k] != 0 and not used_columns[k]:
@@ -188,7 +211,7 @@ def lens_coordinates_jrm(
     return X
 
 
-class HomologyError(Exception):
+class NoHomologyError(Exception):
     def __init__(self, message):
         self.message = message
 

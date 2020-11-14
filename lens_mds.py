@@ -233,6 +233,34 @@ def get_masks(S,p):
         M.append(S==i)
     return M
 
+def lens_distance_matrix(Y,rotations,p):
+    """Find the true lens space distance matrix for a data.
+
+    Parameters
+    ----------
+    Y : ndarray (k*n)
+        Data on lens space with each column a data point. Complex valued
+        with unit-norm columns.
+    rotations : ndarray (n*n)
+        For each pair of data points, `(y_i,y_j)` an integer `s` between
+        `0` and `p` such that the arccosine of the complex inner product
+        :math:`\langle y_i, \omega^p y_j \rangle` gives the correct
+        distance.
+    p : int
+        Root of unity to use in computing distances.
+
+    Returns
+    -------
+    D : ndarray (n*n)
+        Distance matrix.
+
+    """
+
+    M = get_masks(rotations)
+    D = sum(M[i]*(Y.T@mp(omega,i)@Y) for i in range(p)])
+    return D
+    
+
 def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
     """docstring"""
     def F(Y):
