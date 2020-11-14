@@ -27,7 +27,6 @@ def prominent_cocycle(D,q=2,epsilon=1e-3,return_persistence=False):
         persistent cocycle must die after 2*birth + epsilon to be valid.
     return_persistence : bool
         Set true to return the ripser output.
-    # TODO: understand exactly what epsilon does.
 
     Returns
     -------
@@ -38,13 +37,15 @@ def prominent_cocycle(D,q=2,epsilon=1e-3,return_persistence=False):
         Whether the cohomology class if persistent enough to produce a
         valid classifying map. If false the data may lack any H_1
         cocycles or a different coefficient field may be required.
+    cover_radius : float
+        Birth time of valid cocycle + epsilon.
     persistence : dict, optional
         Full output from Ripser. Only returned if `return_persistence`
         is set.
         
     Examples
     --------
-    The simple "house" simplicial complex has a cocyce.
+    The simple "house" simplicial complex has a cocycle.
     >>> D = np.array([
             [0. , 1. , 1.414 , 1. , 0.7],
             [1. , 0. , 1. , 1.414 , 1.5],
@@ -63,6 +64,12 @@ def prominent_cocycle(D,q=2,epsilon=1e-3,return_persistence=False):
     NoHomologyError
         If there are no persistent H_1 cocycles at all.
     
+    TODO
+    ----
+    * A better version of this function would return _all_ valid cocycles,
+    allowing a user to choose which one to create map from.
+    * Sort out how to return data more coherently.
+
     """
     
     PH = ripser(D,coeff=q,do_cocycles=True,maxdim=1,distance_matrix=True)
@@ -77,17 +84,18 @@ def prominent_cocycle(D,q=2,epsilon=1e-3,return_persistence=False):
             'specified.' %q)
     eta = cocycles[index]
     birth = diagram[index,0]
+    cover_radius = birth + epsilon
     death = diagram[index,1]
     if death < 2*birth + epsilon:
         valid_class = False
     else:
         valid_class = True
     if return_persistence:
-        return eta, valid_class, birth+epsilon, PH
+        return eta, valid_class, cover_radius, PH
     else:
-        return eta, valid_class, birth+epsilon
+        return eta, valid_class, cover_radius
 
-def partition_unity_jrm(D,radius,landmarks,conical=False):
+def partition_unity(D,radius,landmarks,conical=False):
     """Partition of unity subordinate to open ball cover.
 
     Parameters
@@ -140,7 +148,7 @@ def partition_unity_jrm(D,radius,landmarks,conical=False):
         S = S/np.sum(S,axis=0)
         return S
 
-def lens_coordinates_jrm(
+def lens_coordinates(
     partition_function,
     cocycle,
     p
@@ -198,18 +206,16 @@ def lens_coordinates_jrm(
     X = np.zeros((d,N),dtype=complex) # set to complex to avoid unsafe cast.
     for i in range(d):
         tmp_eta = np.zeros(d)
-        idx = np.where(cocycle[:,0]==i)[0]
+        idx = np.where(cocycle[:,0]==i)
         tmp_eta[cocycle[idx,1]] = cocycle[idx,2]
-        # TODO: double check that cocycles from ripser come sorted in the
-        # second column, otherwise need to implement that here.
-        # tmp_eta[idx] = cocycle[:,2][idx]
         zeta_i = zeta**tmp_eta
         for k in range(N):
             if partition_function[i,k] != 0 and not used_columns[k]:
                 used_columns[k] = 1
                 X[:,k] = np.sqrt(partition_function[:,k])*zeta_i
+        if sum(used_columns) == N:
+            break
     return X
-
 
 class NoHomologyError(Exception):
     def __init__(self, message):
