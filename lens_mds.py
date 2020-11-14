@@ -2,7 +2,6 @@
 import autograd.numpy as np
 import autograd.numpy.linalg as LA
 from autograd.numpy.linalg import matrix_power as mp
-import matplotlib.pyplot as plt
 import pymanopt
 from pymanopt.solvers import *
 from pymanopt.manifolds import Oblique
@@ -14,8 +13,26 @@ except:
     print('Loading personal version of PPCA. This may not be consistent with '\
         'the published version.')
 
-def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True,appx=False):
-    """Lens multi-dimensional scaling algorithm.
+###############################################################################
+# Lens MDS Algorithm
+###############################################################################
+
+def lmds(
+    Y,
+    D,
+    p,
+    max_iter = 20,
+    verbosity = 1,
+    pmo_solve = 'cg',
+    autograd = True,
+    appx = False
+):
+    """Lens space multi-dimensional scaling algorithm.
+
+    Attempts to align a collection of data points in the lens space
+    :math:`L_p^n` so that the collection of distances between each pair
+    of points matches a given input distance matrix as closely as
+    possible.
 
     Parameters
     ----------
@@ -25,10 +42,9 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True,appx=False):
     D : ndarray (square)
         Distance matrix to optimize toward.
     p : int
-        Cyclic group with which to act. Must be prime (this is not
-        checked).
+        Cyclic group with which to act.
     max_iter: int, optional
-        Number of times to iterate the loop.
+        Maximum number of times to iterate the loop.
     verbosity: int, optional
         Amount of output to display at each iteration.
     pmo_solve: string, {'cg','sd','tr','nm','ps'}
@@ -37,7 +53,7 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True,appx=False):
     Returns
     -------
     X : ndarray
-        Optimal location of data points.
+        Optimal configuration of points on lens space.
     C : list (float)
         Computed cost at each loop of the iteration.
     T : list (float)
@@ -128,6 +144,34 @@ def lmds(Y,D,p,max_iter=20,verbosity=1,pmo_solve='cg',autograd=True,appx=False):
         M = M_new
     return Y, cost_list
 
+def distance_to_weights(D):
+    """Compute the weight matrix W from the distance matrix D."""
+    # TODO: currently identical to pmds version. Remark if changes.
+    W_inv = (1 - np.cos(D)**2)     
+    W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1 - np.eye(D.shape[0],D.shape[1]))
+    return W
+
+def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
+    """docstring"""
+    def F(Y):
+        return 0.5*(sum([
+            LA.norm(M[i]*W*(Y.T@mp(omega,i)@Y) -
+            M[i]*W*np.cos(D))**2 for i in range(p)]
+            ))
+    def dF(Y):
+        return 2*(sum([
+            mp(omega,p-i)@Y@(M[i]*W**2*(Y.T@mp(omega,i)@Y - np.cos(D)))
+            for i in range(p)]
+            ))
+    if return_derivatives:
+        return F, dF
+    else:
+        return F
+
+###############################################################################
+# Lens space utilities
+###############################################################################
+
 def g_action_matrix(p,d):
     """Create a matrix corresponding to the action of Z_p on S^d. 
         
@@ -155,13 +199,34 @@ def g_action_matrix(p,d):
         omega[i:i+2,i:i+2] = rot_block
     return omega
 
-def distance_to_weights(D):
-    """Compute the weight matrix W from the distance matrix D."""
-    # TODO: currently identical to pmds version. Remark if changes.
-    W_inv = (1 - np.cos(D)**2)     
-    W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1 - np.eye(D.shape[0],D.shape[1]))
-    return W
+def lens_distance_matrix(Y,rotations,p):
+    """Find the true lens space distance matrix for a data.
 
+    Parameters
+    ----------
+    Y : ndarray (k*n)
+        Data on lens space with each column a data point. Complex valued
+        with unit-norm columns.
+    rotations : ndarray (n*n)
+        For each pair of data points, `(y_i,y_j)` an integer `s` between
+        `0` and `p` such that the arccosine of the complex inner product
+        :math:`\langle y_i, \omega^p y_j \rangle` gives the correct
+        distance.
+    p : int
+        Root of unity to use in computing distances.
+
+    Returns
+    -------
+    D : ndarray (n*n)
+        Distance matrix.
+
+    """
+
+    M = get_masks(rotations)
+    omega = np.exp(2j*np.pi/p)
+    D = sum(M[i]*(Y.T@(omega**i)*Y) for i in range(p))
+    return D
+ 
 def optimal_rotation_new(Y,p):
     """Choose the correct representative from each equivalence class.
 
@@ -207,14 +272,6 @@ def optimal_rotation(Y,omega,p):
         maxYY = np.maximum(maxYY,tmpYY)
     return S
 
-def acos_validate(M):
-    """Replace values in M outside of domain of acos with +/- 1."""
-    big_vals = M >= 1.0
-    M[big_vals] = 1.0
-    small_vals = M <= -1.0
-    M[small_vals] = -1.0
-    return M
-
 def get_masks(S,p):
     """Turn matrix of correct powers into masks.
 
@@ -233,63 +290,57 @@ def get_masks(S,p):
         M.append(S==i)
     return M
 
-def lens_distance_matrix(Y,rotations,p):
-    """Find the true lens space distance matrix for a data.
+def acos_validate(M):
+    """Replace values in M outside of domain of acos with +/- 1."""
+    big_vals = M >= 1.0
+    M[big_vals] = 1.0
+    small_vals = M <= -1.0
+    M[small_vals] = -1.0
+    return M
+
+def complexify(Y):
+    """Convert data in 2k-dimensional real space to k-dimensional
+    complex space.
 
     Parameters
     ----------
-    Y : ndarray (k*n)
-        Data on lens space with each column a data point. Complex valued
-        with unit-norm columns.
-    rotations : ndarray (n*n)
-        For each pair of data points, `(y_i,y_j)` an integer `s` between
-        `0` and `p` such that the arccosine of the complex inner product
-        :math:`\langle y_i, \omega^p y_j \rangle` gives the correct
-        distance.
-    p : int
-        Root of unity to use in computing distances.
+    Y : ndarray (2k,n)
+        Real-valued array of data. Number of rows must be even.
 
     Returns
     -------
-    D : ndarray (n*n)
-        Distance matrix.
+    Ycplx : ndarray (k,n)
+        Complex-valued array of data.
 
     """
 
-    M = get_masks(rotations)
-    omega = np.exp(2j*np.pi/p)
-    D = sum(M[i]*(Y.T@(omega**i)*Y) for i in range(p))
-    return D
-    
+    Ycplx = Y[0::2] + 1j*Y[1::2]
+    return Ycplx
 
-def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
-    """docstring"""
-    def F(Y):
-        return 0.5*(sum([
-            LA.norm(M[i]*W*(Y.T@mp(omega,i)@Y) -
-            M[i]*W*np.cos(D))**2 for i in range(p)]
-            ))
-    def dF(Y):
-        return 2*(sum([
-            mp(omega,p-i)@Y@(M[i]*W**2*(Y.T@mp(omega,i)@Y - np.cos(D)))
-            for i in range(p)]
-            ))
-    if return_derivatives:
-        return F, dF
-    else:
-        return F
+def realify(Y):
+    """Convert data in k-dimensional complex space to 2k-dimensional
+    real space.
 
-def get_blurred_masks(Y,omega,p,D):
-    """Get approximate versions of the masks by integrating."""
+    Parameters
+    ----------
+    Y : ndarray (k,n)
+        Real-valued array of data, `k` must be even.
 
-    M = []
-    tmp = np.zeros(np.size(Y.T@Y))
-    for i in range(p):
-        tmp = 1/np.abs(D - np.arccos(acos_validate(Y.T@mp(omega,i)@Y)))
-#       tmp = 1/np.arccos(acos_validate(Y.T@mp(omega,i)@Y))
-        M.append(tmp)
-    M = np.nan_to_num(M/sum(M),nan=1.0)
-    return M
+    Returns
+    -------
+    Yreal : ndarray (2k,n)
+        Complex-valued array of data.
+
+    """
+
+    Yreal = np.zeros((2*Y.shape[0],Y.shape[1]))
+    Yreal[0::2] = np.real(Y)
+    Yreal[1::2] = np.imag(Y)
+    return Yreal
+
+###############################################################################
+# Lens PCA Algorithm
+###############################################################################
 
 def lpca(X,k,p=2):
     """Lens PCA method adapted from Luis's code.
@@ -353,8 +404,7 @@ def lpca(X,k,p=2):
     # TODO: return real output when input is real.
     # TODO: consider adding variance captured as a second return value.
     return Y
-        
-# Utility methods for LPCA.
+ 
 def lens_components(Y):
     """Best low-dimensional lens-space representation for dataset Y.
 
@@ -460,42 +510,3 @@ def ONperp(V):
     U = U[:,k:d]
     return U
 
-def complexify(Y):
-    """Convert data in 2k-dimensional real space to k-dimensional
-    complex space.
-
-    Parameters
-    ----------
-    Y : ndarray (2k,n)
-        Real-valued array of data. Number of rows must be even.
-
-    Returns
-    -------
-    Ycplx : ndarray (k,n)
-        Complex-valued array of data.
-
-    """
-
-    Ycplx = Y[0::2] + 1j*Y[1::2]
-    return Ycplx
-
-def realify(Y):
-    """Convert data in k-dimensional complex space to 2k-dimensional
-    real space.
-
-    Parameters
-    ----------
-    Y : ndarray (k,n)
-        Real-valued array of data, `k` must be even.
-
-    Returns
-    -------
-    Yreal : ndarray (2k,n)
-        Complex-valued array of data.
-
-    """
-
-    Yreal = np.zeros((2*Y.shape[0],Y.shape[1]))
-    Yreal[0::2] = np.real(Y)
-    Yreal[1::2] = np.imag(Y)
-    return Yreal
