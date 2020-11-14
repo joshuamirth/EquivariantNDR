@@ -257,7 +257,8 @@ def lens_distance_matrix(Y,rotations,p):
     """
 
     M = get_masks(rotations)
-    D = sum(M[i]*(Y.T@mp(omega,i)@Y) for i in range(p)])
+    omega = np.exp(2j*np.pi/p)
+    D = sum(M[i]*(Y.T@(omega**i)*Y) for i in range(p))
     return D
     
 
@@ -459,3 +460,42 @@ def ONperp(V):
     U = U[:,k:d]
     return U
 
+def complexify(Y):
+    """Convert data in 2k-dimensional real space to k-dimensional
+    complex space.
+
+    Parameters
+    ----------
+    Y : ndarray (2k,n)
+        Real-valued array of data. Number of rows must be even.
+
+    Returns
+    -------
+    Ycplx : ndarray (k,n)
+        Complex-valued array of data.
+
+    """
+
+    Ycplx = Y[0::2] + 1j*Y[1::2]
+    return Ycplx
+
+def realify(Y):
+    """Convert data in k-dimensional complex space to 2k-dimensional
+    real space.
+
+    Parameters
+    ----------
+    Y : ndarray (k,n)
+        Real-valued array of data, `k` must be even.
+
+    Returns
+    -------
+    Yreal : ndarray (2k,n)
+        Complex-valued array of data.
+
+    """
+
+    Yreal = np.zeros((2*Y.shape[0],Y.shape[1]))
+    Yreal[0::2] = np.real(Y)
+    Yreal[1::2] = np.imag(Y)
+    return Yreal
