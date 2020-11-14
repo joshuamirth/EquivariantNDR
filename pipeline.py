@@ -181,10 +181,10 @@ def lens_coordinates_jrm(
         # second column, otherwise need to implement that here.
         tmp_eta[idx] = cocycle[:,2][idx]
         zeta_i = zeta**tmp_eta
-        for j in range(N):
-            if partition_function[i,j] != 0 and not used_columns[j]:
-                used_columns[j] = 1
-                X[:,j] = np.sqrt(partition_function[:,j])*zeta_i
+        for k in range(N):
+            if partition_function[i,k] != 0 and not used_columns[k]:
+                used_columns[k] = 1
+                X[:,k] = np.sqrt(partition_function[:,k])*zeta_i
     return X
 
 
