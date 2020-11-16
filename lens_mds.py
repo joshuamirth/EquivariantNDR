@@ -510,3 +510,128 @@ def ONperp(V):
     U = U[:,k:d]
     return U
 
+###############################################################################
+# What I infer to be Luis' Lens PCA Algorithm
+###############################################################################
+
+def luis_lpca(XX,dim=2,p=2,tol=0.02):
+    """ Hacked together LPCA code from Luis' example file.
+
+    Parameters
+    ----------
+    XX : ndarray (d,n)
+        Complex vectors of data in C^d.
+    k : int
+        (Complex) dimension to reduce down to.
+    p : int
+        quotient group.
+    tol : float
+        Amount of variance allowed to be lost in the initial normal PCA
+        projection.
+
+    Returns
+    -------
+    YY : ndarray (dim,n)
+        Dimension reduced data.
+
+    """
+
+    # This first block seems to just reduce dimension as much as
+    # possible by ordinary PCA.
+    variance = []
+    tolerance = 0.02 # User parameter used to set up the first projection
+    U, s, V = np.linalg.svd(XX, full_matrices=True)
+    v_0 = sqr_ditance_projection(U[:, 0:1], XX)
+    v_1 = 0
+    k_break = len(U)
+    for i in range(2,len(U)+1):
+        v_1 = sqr_ditance_projection(U[:, 0:i], XX)
+        difference_v = abs(v_0 - v_1)
+        if difference_v < tolerance:
+            k_break = i
+            break
+        v_0 = v_1
+    U_tilde = U[:, 0:k_break]
+    variance.append( v_0 ) # lost variance in the projection
+    # project XX into the direction given by U_tilde:
+    XX = np.transpose(np.conj(U_tilde))@XX 
+    # Now a second block does actual Lens PCA down to desired dimension.
+    i = 2
+    while XX.shape[0] > dim:
+        val_smallest, vec_smallest = sp.sparse.linalg.eigs(XX@np.transpose(np.conj(XX)), k=1, which='LM', sigma=0)
+        rotation_matrix = rotM(vec_smallest)
+        Y = rotation_matrix@XX
+        Y = np.delete(Y, (-1), axis=0)
+        variance.append(sqr_ditance_orthogonal_projection(vec_smallest, XX) )
+        XX = Y
+    return XX, variance
+
+def sqr_ditance_projection(U, X):
+    """Function copied from Luis' code."""
+    norm_columns = np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)
+    acos_validate(norm_columns)
+    return np.mean(np.power(np.arccos(norm_columns), 2))
+
+def rotM(a):
+    """Copied from Luis' code.
+
+    This function computes the rotation matrix (orientation preserving)
+    in R^3 perpendicular to the vector a.
+
+    :param a: Vector in R^3.
+    :type a: numpy.array
+
+    :return: 3 x 3 rotation matrix.
+    """
+
+    a = np.reshape(a, (-1,1)) 
+    n = len(a)
+    a = a / np.sqrt(np.real(np.vdot(a,a)))
+    b = np.zeros(n)
+    b[-1] = 1
+    b = np.reshape(b, (-1,1))
+    c = a - (np.transpose(np.conj(b))@a)*b
+    if np.sqrt(np.vdot(c,c)) < 1e-15:
+        rot = np.conj(b.conj().T@a)*np.ones((n,n))
+    else:
+        c = c / np.sqrt(np.real(np.vdot(c,c)))
+        l = np.transpose(np.conj(b))@a
+        beta = np.sqrt(1 - np.vdot(l,l))
+        rot = (np.identity(n) - (1-l)*(c@c.conj().T)
+            - (1 - l.conj())*(b@b.conj().T)
+            + beta*(b@c.conj().T) - c@b.conj().T)
+    return rot
+
+def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
+    '''
+    This function computes minmax subsampling using a square distance matrix.
+
+    :type X: numpy array
+    :param X: Square distance matrix
+
+    :type num_landmarks: int
+    :param num_landmarks: Number of landmarks
+
+    :type seed: list
+    :param list: Default []. List of indices to seed the sampling algorith.
+    '''
+    num_points = len(X)
+
+    if not(seed):
+        ind_L = [np.random.randint(0,num_points)] 
+    else:
+        ind_L = seed
+        num_landmarks += 1
+
+    distance_to_L = np.min(X[ind_L, :], axis=0)
+
+    for i in range(num_landmarks-1):
+        ind_max = np.argmax(distance_to_L)
+        ind_L.append(ind_max)
+
+        dist_temp = X[ind_max, :]
+
+        distance_to_L = np.minimum(distance_to_L, dist_temp)
+            
+    return {'indices':ind_L, 'distance_to_L':distance_to_L}
+
