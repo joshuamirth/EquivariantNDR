@@ -13,6 +13,8 @@ except:
     print('Loading personal version of PPCA. This may not be consistent with '\
         'the published version.')
 
+import scipy as sp  # only needed for lpca.
+
 ###############################################################################
 # Lens MDS Algorithm
 ###############################################################################
@@ -25,7 +27,9 @@ def lmds(
     verbosity = 1,
     pmo_solve = 'cg',
     autograd = True,
-    appx = False
+    appx = False,
+    minstepsize=1e-10,
+    mingradnorm=1e-6
 ):
     """Lens space multi-dimensional scaling algorithm.
 
@@ -89,7 +93,9 @@ def lmds(
 #   true_cost_list = [true_cost(Y.T)]
     manifold = Oblique(d+1,m) # Short, wide matrices.
     if pmo_solve == 'cg':
-        solver = ConjugateGradient()
+        solver = ConjugateGradient(
+                minstepsize=minstepsize,
+                mingradnorm=mingradnorm)
     elif pmo_solve == 'nm':
         solver = NelderMead()
     # TODO: implement and experiment with other solvers.
@@ -101,7 +107,7 @@ def lmds(
             cost, egrad = setup_sum_cost(omega,M,D,W,p,return_derivatives=True)
             problem = pymanopt.Problem(manifold, cost, egrad=egrad, verbosity=verbosity)
         if pmo_solve == 'cg' or pmo_solve == 'sd' or pmo_solve == 'tr':
-            Y_new = solver.solve(problem,x=Y.T)
+            Y_new = solver.solve(problem, x=Y.T)
         else:
             Y_new =  solver.solve(problem)
         Y_new = Y_new.T     # Y should be tall-skinny
@@ -602,36 +608,8 @@ def rotM(a):
             + beta*(b@c.conj().T) - c@b.conj().T)
     return rot
 
-def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
-    '''
-    This function computes minmax subsampling using a square distance matrix.
+def sqr_ditance_orthogonal_projection(U, X):
+    norm_colums = np.sqrt(1 - np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)**2)
+    return np.mean(np.power(np.arccos( norm_colums ), 2))
 
-    :type X: numpy array
-    :param X: Square distance matrix
-
-    :type num_landmarks: int
-    :param num_landmarks: Number of landmarks
-
-    :type seed: list
-    :param list: Default []. List of indices to seed the sampling algorith.
-    '''
-    num_points = len(X)
-
-    if not(seed):
-        ind_L = [np.random.randint(0,num_points)] 
-    else:
-        ind_L = seed
-        num_landmarks += 1
-
-    distance_to_L = np.min(X[ind_L, :], axis=0)
-
-    for i in range(num_landmarks-1):
-        ind_max = np.argmax(distance_to_L)
-        ind_L.append(ind_max)
-
-        dist_temp = X[ind_max, :]
-
-        distance_to_L = np.minimum(distance_to_L, dist_temp)
-            
-    return {'indices':ind_L, 'distance_to_L':distance_to_L}
 
