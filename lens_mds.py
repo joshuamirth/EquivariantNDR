@@ -13,8 +13,6 @@ except:
     print('Loading personal version of PPCA. This may not be consistent with '\
         'the published version.')
 
-import scipy as sp  # only needed for lpca.
-
 ###############################################################################
 # Lens MDS Algorithm
 ###############################################################################
@@ -515,104 +513,5 @@ def ONperp(V):
     U,_,_ = LA.svd(V)
     U = U[:,k:d]
     return U
-
-###############################################################################
-# What I infer to be Luis' Lens PCA Algorithm
-###############################################################################
-
-def luis_lpca(XX,dim=2,p=2,tol=0.02):
-    """ Hacked together LPCA code from Luis' example file.
-
-    Parameters
-    ----------
-    XX : ndarray (d,n)
-        Complex vectors of data in C^d.
-    k : int
-        (Complex) dimension to reduce down to.
-    p : int
-        quotient group.
-    tol : float
-        Amount of variance allowed to be lost in the initial normal PCA
-        projection.
-
-    Returns
-    -------
-    YY : ndarray (dim,n)
-        Dimension reduced data.
-
-    """
-
-    # This first block seems to just reduce dimension as much as
-    # possible by ordinary PCA.
-    variance = []
-    tolerance = 0.02 # User parameter used to set up the first projection
-    U, s, V = np.linalg.svd(XX, full_matrices=True)
-    v_0 = sqr_ditance_projection(U[:, 0:1], XX)
-    v_1 = 0
-    k_break = len(U)
-    for i in range(2,len(U)+1):
-        v_1 = sqr_ditance_projection(U[:, 0:i], XX)
-        difference_v = abs(v_0 - v_1)
-        if difference_v < tolerance:
-            k_break = i
-            break
-        v_0 = v_1
-    U_tilde = U[:, 0:k_break]
-    variance.append( v_0 ) # lost variance in the projection
-    # project XX into the direction given by U_tilde:
-    XX = np.transpose(np.conj(U_tilde))@XX 
-    XX = XX / (np.ones((len(XX), 1))*np.sqrt(np.real(np.diag(np.transpose(np.conj(XX))@XX))))
-    # Now a second block does actual Lens PCA down to desired dimension.
-    i = 2
-    while XX.shape[0] > dim:
-        val, vec = np.linalg.eigh(XX@np.transpose(np.conj(XX)))
-        vec_smallest = vec[:,0]
-        rotation_matrix = rotM(vec_smallest)
-        Y = rotation_matrix@XX
-        Y = np.delete(Y, (-1), axis=0)
-        variance.append(sqr_ditance_orthogonal_projection(vec_smallest, XX) )
-        XX = Y / (np.ones((len(Y), 1))*np.sqrt(np.real(np.diag(np.transpose(np.conj(Y))@Y))))
-    return XX, variance
-
-def sqr_ditance_projection(U, X):
-    """Function copied from Luis' code."""
-    norm_columns = np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)
-    acos_validate(norm_columns)
-    return np.mean(np.power(np.arccos(norm_columns), 2))
-
-def rotM(a):
-    """Copied from Luis' code.
-
-    This function computes the rotation matrix (orientation preserving)
-    in R^3 perpendicular to the vector a.
-
-    :param a: Vector in R^3.
-    :type a: numpy.array
-
-    :return: 3 x 3 rotation matrix.
-    """
-
-    a = np.reshape(a, (-1,1)) 
-    n = len(a)
-    a = a / np.sqrt(np.real(np.vdot(a,a)))
-    b = np.zeros(n)
-    b[-1] = 1
-    b = np.reshape(b, (-1,1))
-    c = a - (np.transpose(np.conj(b))@a)*b
-    if np.sqrt(np.vdot(c,c)) < 1e-15:
-        rot = np.conj(b.conj().T@a)*np.ones((n,n))
-    else:
-        c = c / np.sqrt(np.real(np.vdot(c,c)))
-        l = np.transpose(np.conj(b))@a
-        beta = np.sqrt(1 - np.vdot(l,l))
-        rot = (np.identity(n) - (1-l)*(c@c.conj().T)
-            - (1 - l.conj())*(b@b.conj().T)
-            + beta*(b@c.conj().T) - c@b.conj().T)
-    return rot
-
-def sqr_ditance_orthogonal_projection(U, X):
-    norm_colums = np.sqrt(1 - np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)**2)
-    print(1 - np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)**2)
-    return np.mean(np.power(np.arccos( norm_colums ), 2))
 
 
