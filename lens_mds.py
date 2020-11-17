@@ -569,7 +569,7 @@ def luis_lpca(XX,dim=2,p=2,tol=0.02):
         Y = rotation_matrix@XX
         Y = np.delete(Y, (-1), axis=0)
         variance.append(sqr_ditance_orthogonal_projection(vec_smallest, XX) )
-        XX = Y
+        XX = Y/np.linalg.norm(Y,axis=0)
     return XX, variance
 
 def sqr_ditance_projection(U, X):

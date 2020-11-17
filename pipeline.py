@@ -4,7 +4,13 @@
 import numpy as np
 from ripser import ripser
 
-def prominent_cocycle(D,q=2,epsilon=1e-3,return_persistence=False):
+def prominent_cocycle(
+    D,
+    q=2,
+    epsilon=1e-3,
+    return_persistence=False,
+    threshold_at_death=True
+):
     """Primary cocycle from H_1 persistence for lens coordinate
     representation.
 
@@ -27,6 +33,9 @@ def prominent_cocycle(D,q=2,epsilon=1e-3,return_persistence=False):
         persistent cocycle must die after 2*birth + epsilon to be valid.
     return_persistence : bool
         Set true to return the ripser output.
+    threshold_at_death : bool, optional
+        If true, remove edges from the cocycle which do not exist before
+        the death value. Almost always will want this to be true.
 
     Returns
     -------
@@ -84,16 +93,57 @@ def prominent_cocycle(D,q=2,epsilon=1e-3,return_persistence=False):
             'specified.' %q)
     eta = cocycles[index]
     birth = diagram[index,0]
-    cover_radius = birth + epsilon
     death = diagram[index,1]
-    if death < 2*birth + epsilon:
+    if death <= 2*birth:
         valid_class = False
     else:
         valid_class = True
+    if threshold_at_death:
+        eta = threshold_cocycle(eta,D,death-epsilon)
     if return_persistence:
-        return eta, valid_class, cover_radius, PH
+        return eta, valid_class, birth, PH
     else:
-        return eta, valid_class, cover_radius
+        return eta, valid_class, birth
+
+def threshold_cocycle(cocycle,D,threshold):
+    """Cocycle edges with length less than threshold.
+
+    Take a cocycle and return it restricted only to edges which appear
+    before `r = threshold` in the Vietoris-Rips persistent homology.
+    This is necessary because Ripser returns representative cochains
+    which are possibly from a later persistence value [1]_.
+
+    Parameters
+    ----------
+    cocycle : ndarray (d,3)
+        Cocycle representing choice of persistent H_1 class. The first
+        two columns give the simplices as pairs [i,j]. The third column
+        is the value in :math:`\mathbb{Z}_p` corresponding to each
+        simplex.
+    D : ndarray (n,n)
+        Distance matrix for dataset.
+    threshold : float
+        Maximum length of edge to allow for a cocycle. Usually <= death
+        time of corresponding feature in persistent homology.
+
+    Returns
+    thresh_cocycle : ndarray (k,3)
+        Cocycle with long edges removed. Thus `k <= d`.
+
+    References
+    ----------
+    .. [1] https://ripser.scikit-tda.org/notebooks/Representative%20Cocycles.html
+
+    """
+
+    bad_rows = []
+    for i in range(cocycle.shape[0]):
+        if D[tuple(cocycle[i,0:2])] >= threshold:
+            bad_rows.append(i)
+    threshold_cocycle = np.delete(cocycle,bad_rows,0)
+    return threshold_cocycle
+
+
 
 def partition_unity(D,radius,landmarks,conical=False):
     """Partition of unity subordinate to open ball cover.
@@ -147,6 +197,7 @@ def partition_unity(D,radius,landmarks,conical=False):
     else:
         S = S/np.sum(S,axis=0)
         return S
+
 
 def lens_coordinates(
     partition_function,
@@ -206,8 +257,10 @@ def lens_coordinates(
     X = np.zeros((d,N),dtype=complex) # set to complex to avoid unsafe cast.
     for i in range(d):
         tmp_eta = np.zeros(d)
-        idx = np.where(cocycle[:,0]==i)
+        idx = np.where(cocycle[:,0]==i)  # what about other order?
         tmp_eta[cocycle[idx,1]] = cocycle[idx,2]
+        neg_idx = np.where(cocycle[:,1]==i)
+        tmp_eta[cocycle[neg_idx,0]] = p - cocycle[neg_idx,2]
         zeta_i = zeta**tmp_eta
         for k in range(N):
             if partition_function[i,k] != 0 and not used_columns[k]:
