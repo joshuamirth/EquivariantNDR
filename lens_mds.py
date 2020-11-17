@@ -561,15 +561,17 @@ def luis_lpca(XX,dim=2,p=2,tol=0.02):
     variance.append( v_0 ) # lost variance in the projection
     # project XX into the direction given by U_tilde:
     XX = np.transpose(np.conj(U_tilde))@XX 
+    XX = XX / (np.ones((len(XX), 1))*np.sqrt(np.real(np.diag(np.transpose(np.conj(XX))@XX))))
     # Now a second block does actual Lens PCA down to desired dimension.
     i = 2
     while XX.shape[0] > dim:
-        val_smallest, vec_smallest = sp.sparse.linalg.eigs(XX@np.transpose(np.conj(XX)), k=1, which='LM', sigma=0)
+        val, vec = np.linalg.eigh(XX@np.transpose(np.conj(XX)))
+        vec_smallest = vec[:,0]
         rotation_matrix = rotM(vec_smallest)
         Y = rotation_matrix@XX
         Y = np.delete(Y, (-1), axis=0)
         variance.append(sqr_ditance_orthogonal_projection(vec_smallest, XX) )
-        XX = Y/np.linalg.norm(Y,axis=0)
+        XX = Y / (np.ones((len(Y), 1))*np.sqrt(np.real(np.diag(np.transpose(np.conj(Y))@Y))))
     return XX, variance
 
 def sqr_ditance_projection(U, X):
@@ -610,6 +612,7 @@ def rotM(a):
 
 def sqr_ditance_orthogonal_projection(U, X):
     norm_colums = np.sqrt(1 - np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)**2)
+    print(1 - np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)**2)
     return np.mean(np.power(np.arccos( norm_colums ), 2))
 
 
