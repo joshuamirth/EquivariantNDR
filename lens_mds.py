@@ -24,7 +24,7 @@ def lmds(
     max_iter = 20,
     verbosity = 1,
     pmo_solve = 'cg',
-    autograd = True,
+    autograd = False,
     appx = False,
     minstepsize=1e-10,
     mingradnorm=1e-6
@@ -79,16 +79,9 @@ def lmds(
         S = optimal_rotation(Y.T,omega,p)
         M = get_masks(S,p)
     C = np.cos(D)
-#   if d%2 == 0:
-#       raise ValueError('Input data matrix must have an even number of ' +
-#           'columns (must be on an odd-dimensional sphere). Given data had ' +
-#           '%i columns.',%(d+1))
-    # TODO: verify that input is valid.
+#   # TODO: verify that input is valid.
     cost = setup_sum_cost(omega,M,D,W,p)
     cost_list = [cost(Y.T)]
-#   true_cost = setup_cost(projective_distance_matrix(Y),S)
-#   true_cost = setup_cost(Y,omega,S,D,W)
-#   true_cost_list = [true_cost(Y.T)]
     manifold = Oblique(d+1,m) # Short, wide matrices.
     if pmo_solve == 'cg':
         solver = ConjugateGradient(
@@ -96,14 +89,18 @@ def lmds(
                 mingradnorm=mingradnorm)
     elif pmo_solve == 'nm':
         solver = NelderMead()
-    # TODO: implement and experiment with other solvers.
     for i in range(0,max_iter):
         if autograd:
             cost = setup_sum_cost(omega,M,D,W,p)
             problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)        
         else:
             cost, egrad = setup_sum_cost(omega,M,D,W,p,return_derivatives=True)
-            problem = pymanopt.Problem(manifold, cost, egrad=egrad, verbosity=verbosity)
+            problem = pymanopt.Problem(
+                manifold,
+                cost,
+                egrad = egrad,
+                verbosity = verbosity
+            )
         if pmo_solve == 'cg' or pmo_solve == 'sd' or pmo_solve == 'tr':
             Y_new = solver.solve(problem, x=Y.T)
         else:
@@ -128,10 +125,15 @@ def lmds(
         if verbosity > 0:
             print('Through %i iterations:' %(i+1))
 #           print('\tTrue cost: %2.2f' %true_cost(Y_new.T))
-            print('\tComputed cost: %2.2f' %cost_list[i+1])
+            print('\tComputed cost: %2.2f' %cost_oldM)
             print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
 #           print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
             print('\tComputed cost with new M: %2.2f' %cost_newM)
+            if np.isnan(cost_newM):
+                stuff = {'Y_new': Y_new, 'Y_old': Y,
+                    'S_new': S_new, 'S_old': S, 'M_new': M_new, 'M_old': M,
+                    'cost_fn_new': cost_new, 'cost_fn_old': cost, 'grad': egrad}
+                return Y_new, stuff
 #           print('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)))
 #       if S_diff < 1:
 #           print('No change in S matrix. Stopping iterations')
@@ -159,8 +161,7 @@ def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
     """docstring"""
     def F(Y):
         return 0.5*(sum([
-            LA.norm(M[i]*W*(Y.T@mp(omega,i)@Y) -
-            M[i]*W*np.cos(D))**2 for i in range(p)]
+            LA.norm(M[i]*W*(Y.T@mp(omega,i)@Y - np.cos(D)))**2 for i in range(p)]
             ))
     def dF(Y):
         return 2*(sum([

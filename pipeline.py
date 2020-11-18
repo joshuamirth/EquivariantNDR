@@ -369,4 +369,38 @@ def acos_validate(M):
     M[small_vals] = -1.0
     return M
 
+# Its actually maxmin subsampling. l_next = argmax_X(min_L(d(x,l)))
+def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
+    '''
+    This function computes minmax subsampling using a square distance matrix.
+
+    :type X: numpy array
+    :param X: Square distance matrix
+
+    :type num_landmarks: int
+    :param num_landmarks: Number of landmarks
+
+    :type seed: list
+    :param list: Default []. List of indices to seed the sampling algorith.
+    '''
+    num_points = len(X)
+
+    if not(seed):
+        ind_L = [np.random.randint(0,num_points)] 
+    else:
+        ind_L = seed
+        num_landmarks += 1
+
+    distance_to_L = np.min(X[ind_L, :], axis=0)
+
+    for i in range(num_landmarks-1):
+        ind_max = np.argmax(distance_to_L)
+        ind_L.append(ind_max)
+
+        dist_temp = X[ind_max, :]
+
+        distance_to_L = np.minimum(distance_to_L, dist_temp)
+            
+    return {'indices':ind_L, 'distance_to_L':distance_to_L}
+
 
