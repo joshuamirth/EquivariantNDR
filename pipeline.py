@@ -389,7 +389,8 @@ def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
         ind_L = [np.random.randint(0,num_points)] 
     else:
         ind_L = seed
-        num_landmarks += 1
+        num_landmarks += 1  # Why? I think this makes it return the wrong
+                            # number of points if you apply a seed.
 
     distance_to_L = np.min(X[ind_L, :], axis=0)
 
@@ -403,4 +404,32 @@ def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
             
     return {'indices':ind_L, 'distance_to_L':distance_to_L}
 
+
+def minmax_subsample_point_cloud(X, num_landmarks, distance):
+    '''
+    This function computes minmax subsampling using point cloud and a distance function.
+
+    :type X: numpy array
+    :param X: Point cloud. If X is a nxm matrix, then we are working with a pointcloud with n points and m variables.
+
+    :type num_landmarks: int
+    :param num_landmarks: Number of landmarks
+
+    :type distance: function
+    :param  distance: Distance function. Must be able to compute distance between 2 point cloud with same dimension and different number of points in each point cloud.
+    '''
+    num_points = len(X)
+    ind_L = [np.random.randint(0,num_points)]  
+
+    distance_to_L = distance(X[ind_L,:], X)
+
+    for i in range(num_landmarks-1):
+        ind_max = np.argmax(distance_to_L)
+        ind_L.append(ind_max)
+        
+        dist_temp = distance(X[[ind_max],:], X)
+
+        distance_to_L = np.minimum(distance_to_L, dist_temp)
+
+    return {'indices':ind_L, 'distance_to_L':distance_to_L}
 
