@@ -223,6 +223,60 @@ def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
     such that nearby points have their ambient distance as defined by
     the original distance matrix, while far away points are given the
     shortest path distance in the graph.
+   
+    Parameters
+    ----------
+    data : ndarray
+        Data as an n*2 matrix, assumed to lie on RP^n (i.e. S^n).
+    epsilon : float, optional
+        Radius of neighborhood when constructing graph. Default is ~pi/8.
+    k : int, optional
+        Number of nearest neighbors in k-NN graph. Default is -1 (i.e.
+        use epsilon neighborhoods).
+
+    Returns
+    -------
+    Dhat : ndarray
+        Square distance matrix matrix of the graph. Distances are
+        normalized to correspond to RP^n, i.e. Dhat is scaled so the
+        maximum distance is no larger than pi/2.
+
+    Raises
+    ------
+    ValueError
+        If the provided value of epsilon or k is too small, the graph
+        may not be connected, giving infinite values in the distance
+        matrix. A value error is raised if this occurs, as the later
+        algorithms do not handle infinite values smoothly.
+
+    """
+
+    # Use kNN. Sort twice to get nearest neighbour list.
+    if k > 0:
+        D_sort = np.argsort(np.argsort(D))
+        A = D_sort <= k
+        A = (A + A.T)/2
+    # Use epsilon neighborhoods.
+    else:
+        A = D<epsilon
+    G = csr_matrix(D*A)                   # Matrix representation of graph
+    Dg = floyd_warshall(G,directed=False)     # Path-length distance matrix
+    if np.isinf(np.max(Dg)):
+        raise ValueError('The distance matrix contains infinite values, ' +
+            'indicating that the graph is not connected. Try a larger value ' +
+            'of epsilon or k.')
+    Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
+    return Dhat
+
+
+def graph_distance_matrix(data,epsilon=0.4,k=-1):
+    """Construct a geodesic distance matrix from data in RP^n.
+
+    Given a point cloud of data in RP^n, uses either an epsilon
+    neighborhood or a k-NN algorithm to find nearby points, then builds
+    a distance matrix such that nearby points have their ambient
+    distance, while far away points are given the shortest path distance
+    in the graph.
     
     Parameters
     ----------
