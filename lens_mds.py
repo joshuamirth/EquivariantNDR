@@ -107,7 +107,7 @@ def lmds(
             Y_new =  solver.solve(problem)
         Y_new = Y_new.T     # Y should be tall-skinny
         cost_oldM = cost(Y_new.T)
-        cost_list.append(cost_oldM)
+        # cost_list.append(cost_oldM)
         if appx:
             M_new = get_blurred_masks(Y_new.T,omega,p,D)
         else:
@@ -115,9 +115,11 @@ def lmds(
             M_new = get_masks(S_new,p)
         cost_new = setup_sum_cost(omega,M_new,D,W,p)
         cost_newM = cost_new(Y_new.T)
+        cost_list.append(cost_newM)
 #       S_diff = ((LA.norm(S_new - S))**2)/4
 #       percent_S_diff = 100*S_diff/S_new.size
-        percent_cost_diff = 100*(cost_list[i] - cost_list[i+1])/cost_list[i]
+        percent_cost_diff = 100*(cost_list[i] - cost_oldM)/cost_list[i]
+        #percent_cost_diff = 100*(cost_list[i] - cost_list[i+1])/cost_list[i]
 #       true_cost = setup_cost(projective_distance_matrix(Y),S)
 #       true_cost_list.append(true_cost(Y_new.T))
         # Do an SVD to get the correlation matrix on the sphere.
@@ -138,6 +140,8 @@ def lmds(
 #       if S_diff < 1:
 #           print('No change in S matrix. Stopping iterations')
 #           break
+        if verbosity > 2:
+            print(Y_new.T)
         if percent_cost_diff < .0001:
             print('No significant cost improvement. Stopping iterations.')
             break
@@ -172,6 +176,166 @@ def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
         return F, dF
     else:
         return F
+
+def setup_fubini_study_cost(D,W):
+    def F(Y):
+        return (0.5*np.linalg.norm((Y.conj().T @ Y) * ((Y.conj().T @ Y).conj().T)
+            -  np.cos(D)**2)**2)
+    return F
+
+def fubinistudy(X):
+    """Distance matrix of X using Fubini-Study metric.
+    
+    Parameters
+    ----------
+    X : ndarray (complex, d,n)
+        Data.
+    Returns
+    -------
+    D : ndarray (real, n,n)
+        Distance matrix.
+    
+    """
+    
+    D = np.arccos(np.sqrt((X.conj().T@X)*(X.conj().T@X).conj().T))
+    np.fill_diagonal(D,0) # Things work better if diagonal is exactly zero.
+    return np.real(D)
+
+
+def FS_mds(
+    Y,
+    D,
+    p,
+    max_iter = 20,
+    verbosity = 1,
+    pmo_solve = 'cg',
+    autograd = False,
+    appx = False,
+    minstepsize=1e-10,
+    mingradnorm=1e-6
+):
+    """VERY EXPERIMENTAL.
+
+    Attempts to align a collection of data points in the lens space
+    :math:`L_p^n` so that the collection of distances between each pair
+    of points matches a given input distance matrix as closely as
+    possible.
+
+    Parameters
+    ----------
+    Y : ndarray (m*d)
+        Initial guess of data points. Each row corresponds to a point on
+        the (2n-1)-sphere, so must have norm one and d must be even.
+    D : ndarray (square)
+        Distance matrix to optimize toward.
+    p : int
+        Cyclic group with which to act.
+    max_iter: int, optional
+        Maximum number of times to iterate the loop.
+    verbosity: int, optional
+        Amount of output to display at each iteration.
+    pmo_solve: string, {'cg','sd','tr','nm','ps'}
+        Solver to use with pymanopt. Default is conjugate gradient.
+
+    Returns
+    -------
+    X : ndarray
+        Optimal configuration of points on lens space.
+    C : list (float)
+        Computed cost at each loop of the iteration.
+    T : list (float)
+        Actual cost at each loop of the iteration.
+
+    Notes
+    -----
+    The optimization can only be carried out w/r/t/ an approximation of
+    the true cost function (which is not differentiable). The computed
+    cost C should not match T, but should decrease when T does.
+
+    """
+
+    m = Y.shape[0]
+    d = Y.shape[1] - 1
+    W = distance_to_weights(D)
+    omega = g_action_matrix(p,d)
+    if appx:
+        M = get_blurred_masks(Y.T,omega,p,D)
+    else:
+        S = optimal_rotation(Y.T,omega,p)
+        M = get_masks(S,p)
+    C = np.cos(D)
+#   # TODO: verify that input is valid.
+    cost = setup_sum_cost(omega,M,D,W,p)
+    cost_list = [cost(Y.T)]
+    manifold = Oblique(d+1,m) # Short, wide matrices.
+    if pmo_solve == 'cg':
+        solver = ConjugateGradient(
+                minstepsize=minstepsize,
+                mingradnorm=mingradnorm)
+    elif pmo_solve == 'nm':
+        solver = NelderMead()
+    for i in range(0,max_iter):
+        if autograd:
+            cost = setup_sum_cost(omega,M,D,W,p)
+            problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)        
+        else:
+            cost, egrad = setup_sum_cost(omega,M,D,W,p,return_derivatives=True)
+            problem = pymanopt.Problem(
+                manifold,
+                cost,
+                egrad = egrad,
+                verbosity = verbosity
+            )
+        if pmo_solve == 'cg' or pmo_solve == 'sd' or pmo_solve == 'tr':
+            Y_new = solver.solve(problem, x=Y.T)
+        else:
+            Y_new =  solver.solve(problem)
+        Y_new = Y_new.T     # Y should be tall-skinny
+        cost_oldM = cost(Y_new.T)
+        # cost_list.append(cost_oldM)
+        S_new = optimal_rotation(Y_new.T,omega,p)
+        M_new = get_masks(S_new,p)
+        cost_new = setup_sum_cost(omega,M_new,D,W,p)
+        cost_newM = cost_new(Y_new.T)
+        cost_list.append(cost_newM)
+        percent_cost_diff = 100*(cost_list[i] - cost_oldM)/cost_list[i]
+        # NOW DO AN UPDATE RUN WITH FS-METRIC!
+        print('Entering FS run.')
+        fs_cost = setup_fubini_study_cost(D,W)
+        problem = pymanopt.Problem(manifold,fs_cost,verbosity=verbosity)
+        Ycplx = complexify(Y_new.T)
+        Y_FS = solver.solve(problem, x = Ycplx)
+        Y_FS = realify(Y_FS)
+        cost_newFS = cost_new(Y_FS)
+        if verbosity > 0:
+            print('Through %i iterations:' %(i+1))
+#           print('\tTrue cost: %2.2f' %true_cost(Y_new.T))
+            print('\tComputed cost: %2.2f' %cost_oldM)
+            print('\tPercent cost difference: % 2.2f' %percent_cost_diff)
+#           print('\tPercent Difference in S: % 2.2f' %percent_S_diff)
+            print('\tComputed cost with new M: %2.2f' %cost_newM)
+            print('\tComputed cost after FS update: %2.2f' %cost_newFS)
+            if np.isnan(cost_newM):
+                stuff = {'Y_new': Y_new, 'Y_old': Y,
+                    'S_new': S_new, 'S_old': S, 'M_new': M_new, 'M_old': M,
+                    'cost_fn_new': cost_new, 'cost_fn_old': cost, 'grad': egrad}
+                return Y_new, stuff
+#           print('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)))
+#       if S_diff < 1:
+#           print('No change in S matrix. Stopping iterations')
+#           break
+        if percent_cost_diff < .0001:
+            print('No significant cost improvement. Stopping iterations.')
+            break
+        if i == max_iter:
+            print('Maximum iterations reached.')
+        # Update variables:
+        Y = Y_FS
+#       C = C_new
+#       S = S_new
+        M = M_new
+    return Y, cost_list
+
 
 ###############################################################################
 # Lens space utilities
