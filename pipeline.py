@@ -2,6 +2,7 @@
     dimensionality reduction."""
 
 import numpy as np
+import numpy.linalg as LA
 from ripser import ripser
 
 def prominent_cocycle(
@@ -267,39 +268,43 @@ class NoHomologyError(Exception):
 # What I infer to be Luis' Lens PCA Algorithm
 ###############################################################################
 
-def luis_lpca(XX,dim=2,p=2,tolerance=0.02):
-    """ Hacked together LPCA code from Luis' example file.
+
+def pca(X,tol):
+    """ Classical prinicipal component analysis dimensionality
+    reduction.
 
     Parameters
     ----------
-    XX : ndarray (d,n)
-        Complex vectors of data in C^d.
-    k : int
-        (Complex) dimension to reduce down to.
-    p : int
-        quotient group.
+    X : ndarray (d,n)
+        Data Input data as a set of complex vectors in :math:`\mathbb{C}^d`.
+        Each column is assumed to have unit norm.
     tol : float
-        Amount of variance allowed to be lost in the initial normal PCA
-        projection.
+        Maximum amount of variance allowed to be lost in the projection.
 
     Returns
     -------
-    YY : ndarray (dim,n)
-        Dimension reduced data.
+    Y : ndarray (k,n)
+        Data reduced to complex dimension `k`. Dimension is determined
+        by tolerance setting. 
+
+    Notes
+    -----
+    
+    Examples
+    --------
 
     """
 
-    # This first block seems to just reduce dimension as much as
-    # possible by ordinary PCA.
-    variance = []
-    U, s, V = np.linalg.svd(XX, full_matrices=True)
-    v_0 = sqr_ditance_projection(U[:, 0:1], XX)
+    U, s, V = np.linalg.svd(X, full_matrices=True)
+    # v_0 = sqr_ditance_projection(U[:, 0:1], XX)
+    # The above projects X onto U, then takes the average distance to
+    # that subspace.
     v_1 = 0
     k_break = len(U)
     for i in range(2,len(U)+1):
         v_1 = sqr_ditance_projection(U[:, 0:i], XX)
         difference_v = abs(v_0 - v_1)
-        if difference_v < tolerance:
+        if difference_v < tol:
             k_break = i
             break
         v_0 = v_1
@@ -308,7 +313,99 @@ def luis_lpca(XX,dim=2,p=2,tolerance=0.02):
     # project XX into the direction given by U_tilde:
     XX = np.transpose(np.conj(U_tilde))@XX 
     XX = XX / (np.ones((len(XX), 1))*np.sqrt(np.real(np.diag(np.transpose(np.conj(XX))@XX))))
-    # XX / np.linalg.norm(XX,axis=0)
+
+def pca_variance(U, X):
+# def sqr_ditance_projection(U, X):
+    """Function copied from Luis' code.
+
+    Notes
+    -----
+    I don't understand this. It is supposed to, I think, compute some
+    notion of variance captured by doing a naive PCA projection onto the
+    first k components of the PCA basis followed by renormalizing. But
+    _why_ this formula should mean that is beyond me. In particular,
+    there doesn't seem to be any reason why the norm of these columns
+    should, in general, be in the domain of arccos.
+
+    Additionally, `norm` throws an error here when `U` is a single
+    vector. (U^H X is a row vector and the axis command is undefined for
+    a 1d array.)
+
+    """
+
+    norm_columns = LA.norm(U.conj().T @ X, axis=0)
+    mean = np.mean(np.power(np.arccos(acos_validate(norm_columns)), 2))
+    return mean
+
+def lpca_variance(X):
+# def sqr_ditance_orthogonal_projection(U, X):
+    """ Much like the preceding function, this is copied from Luis'
+    code, and I don't quite follow what it does or is supposed to do.
+    The same issue arises calling `norm`, and there are typically errors
+    forming the square root, as the norm is much larger than 1.
+
+    """
+
+    # Original:
+    # print(np.linalg.norm(np.transpose(np.conj(U))@X, axis=0))
+    # norm_colums = np.sqrt(1 - np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)**2)
+    # return np.mean(np.power(np.arccos( norm_colums ), 2))
+
+    # Updated version that is probably correct:
+    var = np.mean(np.arccos(acos_validate(np.abs(np.sqrt(1 - X[-1,:]**2)))))
+    return var
+
+def lpca(X,dim=2,p=2,tol=0.02):
+    """ Hacked together LPCA code from Luis' example file.
+
+    Parameters
+    ----------
+    X : ndarray (d,n)
+        Input data as a set of complex vectors in :math:`\mathbb{C}^d`.
+        Each column is required to have unit norm.
+    dim : int
+        (Complex) dimension to reduce down to. Default is 2.
+    p : int
+        Quotient group for lens space. Default is 2.
+    tol : float
+        Amount of variance allowed to be lost in the initial normal PCA
+        projection.
+
+    Returns
+    -------
+    Y : ndarray (dim,n)
+        Data reduced to complex dimension `dim`.
+    variance : float list (d - dim)
+        Amount of variance lost in each dimension of reduction.
+
+
+    Notes
+    -----
+    
+    """
+
+    # This first block seems to just reduce dimension as much as
+    # possible by ordinary PCA.
+    U, _, _ = np.linalg.svd(XX, full_matrices=True)
+    v_old = pca_variance(U[:, 0:1], XX)
+    variance = [v_old]
+    k_break = U.shape[0]
+    for i in range(2,len(U)+1):
+        v_new = pca_variance(U[:, 0:i], XX)
+        if abs(v_old - v_new) < tol:
+            k_break = i
+            break
+        variance.append(v_new)
+        v_old = v_new
+    U_tilde = U[:, 0:k_break]
+    # variance.append( v_0 ) # lost variance in the projection
+    # TODO: removing the above in favor of recording the variance
+    # explained per dimension (instead of all in one chunk). Not sure if
+    # this actually makes sense: there may be some incompatibility in
+    # scale between the basic pca variance and the lens pca variance
+    # below making the plots look weird.
+    XX = np.transpose(np.conj(U_tilde))@XX 
+    XX = XX / np.linalg.norm(XX,axis=0)
     # Now a second block does actual Lens PCA down to desired dimension.
     i = 2
     while XX.shape[0] > dim:
@@ -316,59 +413,36 @@ def luis_lpca(XX,dim=2,p=2,tolerance=0.02):
         vec_smallest = vec[:,0]
         XU,Xs,XV = np.linalg.svd(XX)
         Y = XU@XX
-        # rotation_matrix = rotM(vec_smallest)
-        # Replace with SVD?
-        # Y = rotation_matrix@XX
-        var = np.sqrt(1 - Y[-1,:]**2)
+        variance.append(lpca_variance(Y))
         Y = np.delete(Y, (-1), axis=0)
-        variance.append(np.mean(np.arccos(acos_validate(np.abs(var)))))
-        # variance.append(sqr_ditance_orthogonal_projection(vec_smallest, XX) )
-        XX = Y / (np.ones((len(Y), 1))*np.sqrt(np.real(np.diag(np.transpose(np.conj(Y))@Y))))
+        XX = Y / np.linalg.norm(Y, axis=0)
     return XX, variance
 
-def sqr_ditance_projection(U, X):
-    """Function copied from Luis' code."""
-    norm_columns = np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)
-    acos_validate(norm_columns)
-    return np.mean(np.power(np.arccos(norm_columns), 2))
+def acos_validate(M,tol=1e-8):
+    """Replace values outside of domain of acos with +/- 1.
 
-def rotM(a):
-    """Copied from Luis' code.
+    Parameters
+    ----------
+    M : ndarray (m,n)
+        Input matrix.
+    tol : float
+        Raises a warning if the values of `M` lie outside of
+        [-1-tol,1+tol]. Default is `1e-8`.
+        
+    Returns
+    -------
+    M : ndarray (m,n)
+        Matrix with values > 1 replaced by 1.0 and values < -1 replaced
+        by -1.0. Modifies the input matrix in-place.
 
-    This function computes the rotation matrix (orientation preserving)
-    in R^3 perpendicular to the vector a.
+    Examples
+    --------
 
-    :param a: Vector in R^3.
-    :type a: numpy.array
-
-    :return: 3 x 3 rotation matrix.
     """
 
-    a = np.reshape(a, (-1,1)) 
-    n = len(a)
-    a = a / np.sqrt(np.real(np.vdot(a,a)))
-    b = np.zeros(n)
-    b[-1] = 1
-    b = np.reshape(b, (-1,1))
-    c = a - (np.transpose(np.conj(b))@a)*b
-    if np.sqrt(np.vdot(c,c)) < 1e-15:
-        rot = np.conj(b.conj().T@a)*np.ones((n,n))
-    else:
-        c = c / np.sqrt(np.real(np.vdot(c,c)))
-        l = np.transpose(np.conj(b))@a
-        beta = np.sqrt(1 - np.vdot(l,l))
-        rot = (np.identity(n) - (1-l)*(c@c.conj().T)
-            - (1 - l.conj())*(b@b.conj().T)
-            + beta*(b@c.conj().T) - c@b.conj().T)
-    return rot
-
-def sqr_ditance_orthogonal_projection(U, X):
-    print(np.linalg.norm(np.transpose(np.conj(U))@X, axis=0))
-    norm_colums = np.sqrt(1 - np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)**2)
-    return np.mean(np.power(np.arccos( norm_colums ), 2))
-
-def acos_validate(M):
-    """Replace values in M outside of domain of acos with +/- 1."""
+    if  np.max(M) > 1 + tol or np.min(M) < -1 - tol:
+        print('Warning: matrix contained a value of %d. Input may be '\
+            'outside of [-1,1] by more than floating point error.')
     big_vals = M >= 1.0
     M[big_vals] = 1.0
     small_vals = M <= -1.0
