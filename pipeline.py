@@ -550,11 +550,10 @@ def rotate_to_pole(v,old=True):
     if beta < 1e-15:
         Q = np.eye(n)/v[-1]   # Division handles complex case.
     else:
-        c = c / beta    # normalize c
         Q = (np.eye(n)
-            - (1-v[-1]) * c@c.conj().T
+            - ((1-v[-1])/beta**2) * c@c.conj().T
             - (1-np.conj(v[-1])) * e_n@e_n.conj().T
-            + beta * (e_n@c.conj().T - c@e_n.conj().T))
+            + (e_n@c.conj().T - c@e_n.conj().T))
     return Q
 
 def minmax_subsample_point_cloud(X, num_landmarks, distance):
