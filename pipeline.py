@@ -7,7 +7,8 @@ from ripser import ripser
 
 def prominent_cocycle(
     D,
-    q=2,
+    q = 2,
+    threshold_at_death = True
 ):
     """Primary cocycle from H_1 persistence for lens coordinate
     representation.
@@ -33,7 +34,10 @@ def prominent_cocycle(
         Set true to return the ripser output.
     threshold_at_death : bool, optional
         If true, remove edges from the cocycle which do not exist before
-        the death value. Almost always will want this to be true.
+        the death value. In principle this is unnecessary because the
+        partition of unity will be valued at zero for these edges, but
+        for any other analysis it may be desirable to return a true
+        cocycle.
 
     Returns
     -------
@@ -92,6 +96,8 @@ def prominent_cocycle(
     eta = cocycles[index]
     birth = diagram[index,0]
     death = diagram[index,1]
+    if threshold_at_death:
+        eta = threshold_cocycle(eta,D,death)
     return eta, birth, death
 
 def threshold_cocycle(cocycle,D,threshold):
@@ -131,8 +137,6 @@ def threshold_cocycle(cocycle,D,threshold):
             bad_rows.append(i)
     threshold_cocycle = np.delete(cocycle,bad_rows,0)
     return threshold_cocycle
-
-
 
 def partition_unity(D,radius,landmarks,conical=False):
     """Partition of unity subordinate to open ball cover.
@@ -186,7 +190,6 @@ def partition_unity(D,radius,landmarks,conical=False):
     else:
         S = S/np.sum(S,axis=0)
         return S
-
 
 def lens_coordinates(
     partition_function,
@@ -259,6 +262,37 @@ def lens_coordinates(
             break
     return X
 
+def acos_validate(M,tol=1e-6):
+    """Replace values outside of domain of acos with +/- 1.
+
+    Parameters
+    ----------
+    M : ndarray (m,n)
+        Input matrix.
+    tol : float
+        Raises a warning if the values of `M` lie outside of
+        [-1-tol,1+tol]. Default is `1e-6`.
+        
+    Returns
+    -------
+    M : ndarray (m,n)
+        Matrix with values > 1 replaced by 1.0 and values < -1 replaced
+        by -1.0. Modifies the input matrix in-place.
+
+    Examples
+    --------
+
+    """
+
+    if  np.max(M) > 1 + tol or np.min(M) < -1 - tol:
+        print('Warning: matrix contained a value of %2.4f. Input may be '\
+            'outside of [-1,1] by more than floating point error.' %np.max(M))
+    big_vals = M >= 1.0
+    M[big_vals] = 1.0
+    small_vals = M <= -1.0
+    M[small_vals] = -1.0
+    return M
+
 class NoHomologyError(Exception):
     def __init__(self, message):
         self.message = message
@@ -268,8 +302,7 @@ class NoHomologyError(Exception):
 # What I infer to be Luis' Lens PCA Algorithm
 ###############################################################################
 
-
-def pca(X,tol):
+def pca(X,tol=0.2):
     """ Classical prinicipal component analysis dimensionality
     reduction.
 
@@ -295,24 +328,27 @@ def pca(X,tol):
 
     """
 
-    U, s, V = np.linalg.svd(X, full_matrices=True)
-    # v_0 = sqr_ditance_projection(U[:, 0:1], XX)
-    # The above projects X onto U, then takes the average distance to
-    # that subspace.
-    v_1 = 0
-    k_break = len(U)
+    U, _, _ = np.linalg.svd(X, full_matrices=True)
+    v_old = pca_variance(U[:, 0:1], X)
+    variance = [v_old]
+    k_break = U.shape[0]
     for i in range(2,len(U)+1):
-        v_1 = sqr_ditance_projection(U[:, 0:i], XX)
-        difference_v = abs(v_0 - v_1)
-        if difference_v < tol:
+        v_new = pca_variance(U[:, 0:i], X)
+        if abs(v_old - v_new) < tol:
             k_break = i
             break
-        v_0 = v_1
+        variance.append(v_new)
+        v_old = v_new
     U_tilde = U[:, 0:k_break]
-    variance.append( v_0 ) # lost variance in the projection
-    # project XX into the direction given by U_tilde:
-    XX = np.transpose(np.conj(U_tilde))@XX 
-    XX = XX / (np.ones((len(XX), 1))*np.sqrt(np.real(np.diag(np.transpose(np.conj(XX))@XX))))
+    # variance.append( v_0 ) # lost variance in the projection
+    # TODO: removing the above in favor of recording the variance
+    # explained per dimension (instead of all in one chunk). Not sure if
+    # this actually makes sense: there may be some incompatibility in
+    # scale between the basic pca variance and the lens pca variance
+    # below making the plots look weird.
+    X = np.transpose(np.conj(U_tilde))@X 
+    X = X / np.linalg.norm(X,axis=0)
+    return X, variance
 
 def pca_variance(U, X):
 # def sqr_ditance_projection(U, X):
@@ -378,7 +414,6 @@ def lpca(X,dim=2,p=2,tol=0.02):
     variance : float list (d - dim)
         Amount of variance lost in each dimension of reduction.
 
-
     Notes
     -----
     
@@ -418,37 +453,6 @@ def lpca(X,dim=2,p=2,tol=0.02):
         XX = Y / np.linalg.norm(Y, axis=0)
     return XX, variance
 
-def acos_validate(M,tol=1e-8):
-    """Replace values outside of domain of acos with +/- 1.
-
-    Parameters
-    ----------
-    M : ndarray (m,n)
-        Input matrix.
-    tol : float
-        Raises a warning if the values of `M` lie outside of
-        [-1-tol,1+tol]. Default is `1e-8`.
-        
-    Returns
-    -------
-    M : ndarray (m,n)
-        Matrix with values > 1 replaced by 1.0 and values < -1 replaced
-        by -1.0. Modifies the input matrix in-place.
-
-    Examples
-    --------
-
-    """
-
-    if  np.max(M) > 1 + tol or np.min(M) < -1 - tol:
-        print('Warning: matrix contained a value of %d. Input may be '\
-            'outside of [-1,1] by more than floating point error.')
-    big_vals = M >= 1.0
-    M[big_vals] = 1.0
-    small_vals = M <= -1.0
-    M[small_vals] = -1.0
-    return M
-
 # Its actually maxmin subsampling. l_next = argmax_X(min_L(d(x,l)))
 def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
     '''
@@ -484,6 +488,74 @@ def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
             
     return {'indices':ind_L, 'distance_to_L':distance_to_L}
 
+
+def rotate_to_pole(v,old=True):
+    """Rotation matrix aligning vector with last standard basis vector.
+
+    Returns an orthogonal or unitary matrix `Q` such that :math:`Qv =
+    \|v\|e_n` where :math:`e_n = [0,...,0,1]^T`. Handles both real and
+    complex vectors. If the input vector is real, the output matrix is
+    orthogonal, while if the input is complex, the output will be a unitary
+    matrix.
+
+    Parameters
+    ----------
+    v : ndarray (n,) or (n,1)
+        Vector (real or complex) to rotate so that it aligns with
+        :math:`e_n = [0,...,0,1]^T`.
+
+    Returns
+    -------
+    Q : ndarray (n,n)
+        Orthogonal (unitary) matrix satisfying :math:`Qv = \|v\|e_n`.
+
+    Notes
+    -----
+
+    If the input vector is a row vector (shape (1,n) ndarray), then the
+    multiplication `Q@v` is undefined. Instead the returned matrix `Q`
+    satisfies `v@Q.T = [0,...,0,1]`.
+
+    There is not a unique solution to :math:`Qv = e_n` in dimensions
+    greater than three.
+
+    """
+
+    # Shape input into a column vector ((n,1) ndarray).
+    vec_dim = len(v.shape)
+    if vec_dim == 1:
+        v = np.reshape(v, (-1,1)) 
+    elif vec_dim == 2:
+        m,n = v.shape
+        if m == 1 or n == 1:
+            v = np.reshape(v,(m*n,1))
+        else:
+            raise ValueError('Input must be a vector (ndarray of shape '\
+                '(n,), (n,1), or (1,n)). Input given had shape (%d,%d).'\
+                %(m,n))
+    else:
+        raise ValueError('Input must be a vector (ndarray of shape '\
+                '(n,), (n,1), or (1,n)). Input given was a %d-dimensional '\
+                'array.' %vec_dim)
+    n = v.shape[0]
+    if LA.norm(v) < 1e-15:
+        raise ZeroDivisionError('Vector is (numerically) zero. Cannot '\
+            'rotate into alignment with a standard basis vector.')
+    else:
+        v = v / LA.norm(v)
+    e_n = np.zeros((n,1))
+    e_n[-1] = 1
+    c = v - v*e_n
+    beta = LA.norm(c)
+    if beta < 1e-15:
+        Q = np.eye(n)/v[-1]   # Division handles complex case.
+    else:
+        c = c / beta    # normalize c
+        Q = (np.eye(n)
+            - (1-v[-1]) * c@c.conj().T
+            - (1-np.conj(v[-1])) * e_n@e_n.conj().T
+            + beta * (e_n@c.conj().T - c@e_n.conj().T))
+    return Q
 
 def minmax_subsample_point_cloud(X, num_landmarks, distance):
     '''
