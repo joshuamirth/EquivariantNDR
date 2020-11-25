@@ -352,8 +352,7 @@ def rotate_to_pole(v):
             + (np.outer(e_n,c.conj()) - np.outer(c,e_n.conj())))
     return Q
 
-
-def lpca(X,dim,tol=-1):
+def lpca(X,dim,p,tol=-1):
     """Lens principal component analysis algorithm.
 
     Based on the algorithm described in [1]_, reduces a point cloud in
@@ -367,7 +366,11 @@ def lpca(X,dim,tol=-1):
         Data Input data as a set of complex vectors in
         :math:`\mathbb{C}^d`. Each column is assumed to have unit norm.
     dim : int
-        Final output dimension for data.
+        Final output dimension for data. Here `dim` should be the
+        dimension of the ambient complex space, so that the
+        corresponding lens space has dimension `2*dim - 1`.
+    p : int
+        Cyclic group defining the choice of lens space.
     tol : float
         Maximum amount of variance allowed to be lost in the initial
         classical PCA projection. If negative no classical PCA step is
@@ -390,26 +393,42 @@ def lpca(X,dim,tol=-1):
 
     """
 
-    X = X / np.linalg.norm(X,axis=0)
-    U, s, V = np.linalg.svd(X)
+    Y = X / LA.norm(X,axis=0)
+#    U, s, V = np.linalg.svd(Y)
     variance = []
-    if tol > 0:
-        var_list = subspace_variance(U) # TODO: implement variance correctly
-        k = # TODO: find first element in var_list greater than tol.
-        U = U[:,0:k]
-        X = U.conj().T@X
-        X = X / np.linalg.norm(X)
-        for i in range(k):
-            variance.append(var_list[i])
-    while X.shape[0] > k:
-        U = LA.svd(X)
+#    if tol > 0:
+#        var_list = subspace_variance(U) # TODO: implement variance correctly
+#        k = # TODO: find first element in var_list greater than tol.
+#        U = U[:,0:k]
+#        Y = U.conj().T@Y
+#        Y = Y / np.linalg.norm(Y)
+#        for i in range(k):
+#            variance.append(var_list[i])
+    while Y.shape[0] > dim:
+        U,_,_ = LA.svd(Y)
         Q = rotate_to_pole(U[:,-1])
-        X = Q@X
-        X = np.delete(X, (-1), axis=0)
-        X = X / LA.norm(X, axis=0)
-        variance.append(lpca_variance(U,X)) # TODO: fix this variance method.
-    return X
+        Y = Q@Y
+        Y = np.delete(Y, (-1), axis=0)
+        # TODO: need to handle the case that the norm of a column,
+        # post-deletion, is zero. (This does happen.) Note that a
+        # small norm but nonzero vector is essentially projected out in
+        # a random direction, so that may be a reasonable way to handle
+        # numerically zero vectors.
+        if np.any(LA.norm(Y, axis=0) < 1e-15):
+            raise ZeroDivisionError('Cannot normalize data. Reduction to '\
+                'dimension %d set a column to zero.' %Y.shape[0])
+        Y = Y / LA.norm(Y, axis=0)
+        variance.append(lpca_variance(U,Y,p)) # TODO: fix this variance method.
+    # TODO: set all return variables.
+    return Y
 
+def lpca_variance(U,Y,p):
+    # TODO
+    return 1
+
+def subspace_variance(U,Y,p):
+    # TODO
+    return 0
 
 ###############################################################################
 # What I infer to be Luis' Lens PCA Algorithm
@@ -486,7 +505,7 @@ def pca_variance(U, X):
     mean = np.mean(np.power(np.arccos(acos_validate(norm_columns)), 2))
     return mean
 
-def lpca_variance(X):
+# def lpca_variance(X):
 # def sqr_ditance_orthogonal_projection(U, X):
     """ Much like the preceding function, this is copied from Luis'
     code, and I don't quite follow what it does or is supposed to do.
@@ -501,10 +520,10 @@ def lpca_variance(X):
     # return np.mean(np.power(np.arccos( norm_colums ), 2))
 
     # Updated version that is probably correct:
-    var = np.mean(np.arccos(acos_validate(np.abs(np.sqrt(1 - X[-1,:]**2)))))
-    return var
+#   var = np.mean(np.arccos(acos_validate(np.abs(np.sqrt(1 - X[-1,:]**2)))))
+#   return var
 
-def lpca(X,dim=2,p=2,tol=0.02):
+def luis_lpca(X,dim=2,p=2,tol=0.02):
     """ Hacked together LPCA code from Luis' example file.
 
     Parameters
