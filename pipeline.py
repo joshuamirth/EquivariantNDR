@@ -297,6 +297,119 @@ class NoHomologyError(Exception):
     def __init__(self, message):
         self.message = message
 
+def rotate_to_pole(v):
+    """Rotation matrix aligning vector with last standard basis vector.
+
+    Returns an orthogonal or unitary matrix `Q` such that :math:`Qv =
+    \|v\|e_n` where :math:`e_n = [0,...,0,1]^T`. Handles both real and
+    complex vectors. If the input vector is real, the output matrix is
+    orthogonal, while if the input is complex, the output will be a unitary
+    matrix. 
+
+    Parameters
+    ----------
+    v : ndarray (n,)
+        Vector (real or complex) to rotate so that it aligns with
+        :math:`e_n = [0,...,0,1]^T`. If the input array is not
+        one-dimensional it is flattened.
+
+    Returns
+    -------
+    Q : ndarray (n,n)
+        Orthogonal (unitary) matrix satisfying :math:`Qv = \|v\|e_n`.
+
+    Notes
+    -----
+
+    If the input vector is a row vector (shape (1,n) ndarray), then the
+    multiplication `Q@v` is undefined. Instead the returned matrix `Q`
+    satisfies `v@Q.T = [0,...,0,1]`.
+
+    There is not a unique solution to :math:`Qv = e_n` in dimensions
+    greater than three. `Q` is chosen to be orientation-preserving, i.e.
+    `det(Q) = +1`.
+
+
+    """
+
+    v = v.flatten()
+    n = v.shape[0]
+    if LA.norm(v) < 1e-15:
+        raise ZeroDivisionError('Vector is (numerically) zero. Cannot '\
+            'rotate into alignment with a standard basis vector.')
+    else:
+        v = v / LA.norm(v)
+    e_n = np.zeros(n)
+    e_n[-1] = 1
+    c = v - v*e_n
+    beta = LA.norm(c)
+    if beta < 1e-15:
+        Q = np.eye(n)/v[-1]   # Division handles complex case.
+    else:
+        Q = (np.eye(n)
+            - ((1 - v[-1])/beta**2) * np.outer(c,c.conj())
+            - (1 - np.conj(v[-1])) * np.outer(e_n,e_n.conj())
+            + (np.outer(e_n,c.conj()) - np.outer(c,e_n.conj())))
+    return Q
+
+
+def lpca(X,dim,tol=-1):
+    """Lens principal component analysis algorithm.
+
+    Based on the algorithm described in [1]_, reduces a point cloud in
+    the lens space :math:`L^N_p` to a point cloud in :math:`L^n_p` with
+    `n << N` by iteratively projecting onto the codimension 1 subspace
+    which preserves the maximum amount of variance in the data.
+
+    Parameters
+    ----------
+    X : ndarray (N,k)
+        Data Input data as a set of complex vectors in
+        :math:`\mathbb{C}^d`. Each column is assumed to have unit norm.
+    dim : int
+        Final output dimension for data.
+    tol : float
+        Maximum amount of variance allowed to be lost in the initial
+        classical PCA projection. If negative no classical PCA step is
+        used.
+
+    Returns
+    -------
+    Y : ndarray (dim,k)
+        Dimension-reduced point cloud of data. Each column is a complex
+        unit vector representing a point in lens space.
+    variance : ndarray (N-dim)
+        Amount of variance lost with each projection.
+
+    Notes
+    -----
+
+    To speed up projection, a first-pass removing multiple projections
+    can be made. The amount of variance allowed to be lost in this
+    projection is given by setting `tol`.
+
+    """
+
+    X = X / np.linalg.norm(X,axis=0)
+    U, s, V = np.linalg.svd(X)
+    variance = []
+    if tol > 0:
+        var_list = subspace_variance(U) # TODO: implement variance correctly
+        k = # TODO: find first element in var_list greater than tol.
+        U = U[:,0:k]
+        X = U.conj().T@X
+        X = X / np.linalg.norm(X)
+        for i in range(k):
+            variance.append(var_list[i])
+    while X.shape[0] > k:
+        U = LA.svd(X)
+        Q = rotate_to_pole(U[:,-1])
+        X = Q@X
+        X = np.delete(X, (-1), axis=0)
+        X = X / LA.norm(X, axis=0)
+        variance.append(lpca_variance(U,X)) # TODO: fix this variance method.
+    return X
+
 
 ###############################################################################
 # What I infer to be Luis' Lens PCA Algorithm
@@ -487,74 +600,6 @@ def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
         distance_to_L = np.minimum(distance_to_L, dist_temp)
             
     return {'indices':ind_L, 'distance_to_L':distance_to_L}
-
-
-def rotate_to_pole(v,old=True):
-    """Rotation matrix aligning vector with last standard basis vector.
-
-    Returns an orthogonal or unitary matrix `Q` such that :math:`Qv =
-    \|v\|e_n` where :math:`e_n = [0,...,0,1]^T`. Handles both real and
-    complex vectors. If the input vector is real, the output matrix is
-    orthogonal, while if the input is complex, the output will be a unitary
-    matrix.
-
-    Parameters
-    ----------
-    v : ndarray (n,) or (n,1)
-        Vector (real or complex) to rotate so that it aligns with
-        :math:`e_n = [0,...,0,1]^T`.
-
-    Returns
-    -------
-    Q : ndarray (n,n)
-        Orthogonal (unitary) matrix satisfying :math:`Qv = \|v\|e_n`.
-
-    Notes
-    -----
-
-    If the input vector is a row vector (shape (1,n) ndarray), then the
-    multiplication `Q@v` is undefined. Instead the returned matrix `Q`
-    satisfies `v@Q.T = [0,...,0,1]`.
-
-    There is not a unique solution to :math:`Qv = e_n` in dimensions
-    greater than three.
-
-    """
-
-    # Shape input into a column vector ((n,1) ndarray).
-    vec_dim = len(v.shape)
-    if vec_dim == 1:
-        v = np.reshape(v, (-1,1)) 
-    elif vec_dim == 2:
-        m,n = v.shape
-        if m == 1 or n == 1:
-            v = np.reshape(v,(m*n,1))
-        else:
-            raise ValueError('Input must be a vector (ndarray of shape '\
-                '(n,), (n,1), or (1,n)). Input given had shape (%d,%d).'\
-                %(m,n))
-    else:
-        raise ValueError('Input must be a vector (ndarray of shape '\
-                '(n,), (n,1), or (1,n)). Input given was a %d-dimensional '\
-                'array.' %vec_dim)
-    n = v.shape[0]
-    if LA.norm(v) < 1e-15:
-        raise ZeroDivisionError('Vector is (numerically) zero. Cannot '\
-            'rotate into alignment with a standard basis vector.')
-    else:
-        v = v / LA.norm(v)
-    e_n = np.zeros((n,1))
-    e_n[-1] = 1
-    c = v - v*e_n
-    beta = LA.norm(c)
-    if beta < 1e-15:
-        Q = np.eye(n)/v[-1]   # Division handles complex case.
-    else:
-        Q = (np.eye(n)
-            - ((1-v[-1])/beta**2) * c@c.conj().T
-            - (1-np.conj(v[-1])) * e_n@e_n.conj().T
-            + (e_n@c.conj().T - c@e_n.conj().T))
-    return Q
 
 def minmax_subsample_point_cloud(X, num_landmarks, distance):
     '''
