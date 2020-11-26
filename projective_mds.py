@@ -15,6 +15,9 @@ import os
 import random 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
+# TODO: decide where best to place these utility functions.
+from pipeline import acos_validate
+
 # dreimac does not install properly on my system.
 try:
     from dreimac.projectivecoords import ppca
@@ -459,14 +462,6 @@ def plot_RP2(X,axes=None,pullback=True,compare=False,Z=[]):
 ###############################################################################
 # Miscellaneous
 ###############################################################################
-
-def acos_validate(M):
-    """Replace values in M outside of domain of acos with +/- 1."""
-    big_vals = M >= 1.0
-    M[big_vals] = 1.0
-    small_vals = M <= -1.0
-    M[small_vals] = -1.0
-    return M
 
 def distance_to_weights(D):
     """Compute the weight matrix W from the distance matrix D."""

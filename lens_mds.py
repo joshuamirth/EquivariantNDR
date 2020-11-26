@@ -393,7 +393,6 @@ def fubinistudy(X):
     np.fill_diagonal(D,0) # Things work better if diagonal is exactly zero.
     return np.real(D)
 
-
 def FS_mds(
     Y,
     D,
