@@ -293,10 +293,6 @@ def acos_validate(M,tol=1e-6):
     M[small_vals] = -1.0
     return M
 
-class NoHomologyError(Exception):
-    def __init__(self, message):
-        self.message = message
-
 def rotate_to_pole(v):
     """Rotation matrix aligning vector with last standard basis vector.
 
@@ -484,160 +480,13 @@ def lpca(X,dim,p=2,tol=-1):
 #def subspace_variance(U,Y,p):
 #    return 0
 
+class NoHomologyError(Exception):
+    def __init__(self, message):
+        self.message = message
+
 ###############################################################################
-# What I infer to be Luis' Lens PCA Algorithm
+# Functions copied from Luis' notebooks
 ###############################################################################
-
-def pca(X,tol=0.2):
-    """ Classical prinicipal component analysis dimensionality
-    reduction.
-
-    Parameters
-    ----------
-    X : ndarray (d,n)
-        Data Input data as a set of complex vectors in :math:`\mathbb{C}^d`.
-        Each column is assumed to have unit norm.
-    tol : float
-        Maximum amount of variance allowed to be lost in the projection.
-
-    Returns
-    -------
-    Y : ndarray (k,n)
-        Data reduced to complex dimension `k`. Dimension is determined
-        by tolerance setting. 
-
-    Notes
-    -----
-    
-    Examples
-    --------
-
-    """
-
-    U, _, _ = np.linalg.svd(X, full_matrices=True)
-    v_old = pca_variance(U[:, 0:1], X)
-    variance = [v_old]
-    k_break = U.shape[0]
-    for i in range(2,len(U)+1):
-        v_new = pca_variance(U[:, 0:i], X)
-        if abs(v_old - v_new) < tol:
-            k_break = i
-            break
-        variance.append(v_new)
-        v_old = v_new
-    U_tilde = U[:, 0:k_break]
-    # variance.append( v_0 ) # lost variance in the projection
-    # TODO: removing the above in favor of recording the variance
-    # explained per dimension (instead of all in one chunk). Not sure if
-    # this actually makes sense: there may be some incompatibility in
-    # scale between the basic pca variance and the lens pca variance
-    # below making the plots look weird.
-    X = np.transpose(np.conj(U_tilde))@X 
-    X = X / np.linalg.norm(X,axis=0)
-    return X, variance
-
-def pca_variance(U, X):
-# def sqr_ditance_projection(U, X):
-    """Function copied from Luis' code.
-
-    Notes
-    -----
-    I don't understand this. It is supposed to, I think, compute some
-    notion of variance captured by doing a naive PCA projection onto the
-    first k components of the PCA basis followed by renormalizing. But
-    _why_ this formula should mean that is beyond me. In particular,
-    there doesn't seem to be any reason why the norm of these columns
-    should, in general, be in the domain of arccos.
-
-    Additionally, `norm` throws an error here when `U` is a single
-    vector. (U^H X is a row vector and the axis command is undefined for
-    a 1d array.)
-
-    """
-
-    norm_columns = LA.norm(U.conj().T @ X, axis=0)
-    mean = np.mean(np.power(np.arccos(acos_validate(norm_columns)), 2))
-    return mean
-
-# def lpca_variance(X):
-# def sqr_ditance_orthogonal_projection(U, X):
-    """ Much like the preceding function, this is copied from Luis'
-    code, and I don't quite follow what it does or is supposed to do.
-    The same issue arises calling `norm`, and there are typically errors
-    forming the square root, as the norm is much larger than 1.
-
-    """
-
-    # Original:
-    # print(np.linalg.norm(np.transpose(np.conj(U))@X, axis=0))
-    # norm_colums = np.sqrt(1 - np.linalg.norm(np.transpose(np.conj(U))@X, axis=0)**2)
-    # return np.mean(np.power(np.arccos( norm_colums ), 2))
-
-    # Updated version that is probably correct:
-#   var = np.mean(np.arccos(acos_validate(np.abs(np.sqrt(1 - X[-1,:]**2)))))
-#   return var
-
-def luis_lpca(X,dim=2,p=2,tol=0.02):
-    """ Hacked together LPCA code from Luis' example file.
-
-    Parameters
-    ----------
-    X : ndarray (d,n)
-        Input data as a set of complex vectors in :math:`\mathbb{C}^d`.
-        Each column is required to have unit norm.
-    dim : int
-        (Complex) dimension to reduce down to. Default is 2.
-    p : int
-        Quotient group for lens space. Default is 2.
-    tol : float
-        Amount of variance allowed to be lost in the initial normal PCA
-        projection.
-
-    Returns
-    -------
-    Y : ndarray (dim,n)
-        Data reduced to complex dimension `dim`.
-    variance : float list (d - dim)
-        Amount of variance lost in each dimension of reduction.
-
-    Notes
-    -----
-    
-    """
-
-    # This first block seems to just reduce dimension as much as
-    # possible by ordinary PCA.
-    U, _, _ = np.linalg.svd(XX, full_matrices=True)
-    v_old = pca_variance(U[:, 0:1], XX)
-    variance = [v_old]
-    k_break = U.shape[0]
-    for i in range(2,len(U)+1):
-        v_new = pca_variance(U[:, 0:i], XX)
-        if abs(v_old - v_new) < tol:
-            k_break = i
-            break
-        variance.append(v_new)
-        v_old = v_new
-    U_tilde = U[:, 0:k_break]
-    # variance.append( v_0 ) # lost variance in the projection
-    # TODO: removing the above in favor of recording the variance
-    # explained per dimension (instead of all in one chunk). Not sure if
-    # this actually makes sense: there may be some incompatibility in
-    # scale between the basic pca variance and the lens pca variance
-    # below making the plots look weird.
-    XX = np.transpose(np.conj(U_tilde))@XX 
-    XX = XX / np.linalg.norm(XX,axis=0)
-    # Now a second block does actual Lens PCA down to desired dimension.
-    i = 2
-    while XX.shape[0] > dim:
-        val, vec = np.linalg.eigh(XX@np.transpose(np.conj(XX)))
-        vec_smallest = vec[:,0]
-        XU,Xs,XV = np.linalg.svd(XX)
-        Y = XU@XX
-        variance.append(lpca_variance(Y))
-        Y = np.delete(Y, (-1), axis=0)
-        XX = Y / np.linalg.norm(Y, axis=0)
-    return XX, variance
 
 # Its actually maxmin subsampling. l_next = argmax_X(min_L(d(x,l)))
 def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
