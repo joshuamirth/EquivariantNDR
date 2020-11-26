@@ -158,10 +158,32 @@ def lmds(
     return Y, cost_list
 
 def distance_to_weights(D):
-    """Compute the weight matrix W from the distance matrix D."""
-    # TODO: currently identical to pmds version. Remark if changes.
+    """Compute the weight matrix W from the distance matrix D.
+
+    The weight matrix corresponding to a distance matrix `D = [d_ij]` is
+    given by `W = [w_ij]` with
+
+        .. :math:`w_{ij} = \frac{1}{\sqrt{1 - cos^2(d_ij)}}`.
+
+    Since this is undefined when `d_ij = 0`, so we set the diagonal
+    entries of `W` to 1.    
+
+    Parameters
+    ----------
+    D : ndarray (n,n)
+        Distance matrix. Must be square and contain no off-diagonal zeros.
+    
+    Returns
+    -------
+    W : ndarray (n,n)
+        Weights matrix.
+
+    """
+    # TODO: no longer identical to pmds version. This version should
+    # always be used.
     W_inv = (1 - np.cos(D)**2)     
-    W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1 - np.eye(D.shape[0],D.shape[1]))
+    W = np.sqrt((W_inv+np.eye(D.shape[0]))**-1)
+    np.fill_diagonal(W,1)
     return W
 
 def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):

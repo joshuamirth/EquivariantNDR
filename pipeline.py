@@ -97,7 +97,7 @@ def prominent_cocycle(
     birth = diagram[index,0]
     death = diagram[index,1]
     if threshold_at_death:
-        eta = threshold_cocycle(eta,D,death)
+        eta = threshold_cocycle(eta, D, death - 1e-6)
     return eta, birth, death
 
 def threshold_cocycle(cocycle,D,threshold):
