@@ -352,7 +352,7 @@ def rotate_to_pole(v):
             + (np.outer(e_n,c.conj()) - np.outer(c,e_n.conj())))
     return Q
 
-def lpca(X,dim,p,tol=-1):
+def lpca(X,dim,p=2,tol=-1):
     """Lens principal component analysis algorithm.
 
     Based on the algorithm described in [1]_, reduces a point cloud in
@@ -384,6 +384,34 @@ def lpca(X,dim,p,tol=-1):
     variance : ndarray (N-dim)
         Amount of variance lost with each projection.
 
+    Examples
+    --------
+    A matrix with no n-th coordinates should project down one dimension
+    with no loss in variance.
+    >>> X = np.array([[1.+0.j, 0.+0.j, 0.+0.j, 1.+0.j],
+        [0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j],
+        [0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j],
+        [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j]])
+    >>> Y, v = lpca(X,3)
+    >>> Y
+        array([[1.+0.j, 0.+0.j, 0.+0.j, 1.+0.j],
+        [0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j],
+        [0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j]])
+    >>> v
+        [0.0]
+    
+    Adding a small amount of wiggle in the last component produces the
+    same projection, but with some variance lost.
+    >>> X[3,3] = 0.1
+    >>> X = X / numpy.linalg.norm(X, axis=0)
+    >>> Y, v = lpca(X,3)
+    >>> Y
+        array([[0.-1.j, 0.+0.j, 0.+0.j, 1.+0.j],
+        [0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j],
+        [0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j]])
+    >>> v
+        [0.0012417300361755113]
+
     Notes
     -----
 
@@ -391,11 +419,38 @@ def lpca(X,dim,p,tol=-1):
     can be made. The amount of variance allowed to be lost in this
     projection is given by setting `tol`.
 
+    The implementation here differs slightly from that described in
+    [1]_. To reduce the dimension by one, first the SVD of the data,
+    `X`, is computed, :math:`USV^T = X`. The direction describing the
+    least variance is the last column of `U`, the singular vector `u`
+    corresponding to the smallest singular value. A rotation matrix `Q`
+    is computed such that `Qu = e_n`. The entire dataset is then rotated
+    by applying `Q` on the left so that the direction of least variance
+    is `e_n`. The data is then projected off of the direction of least
+    variance by deleting the last component. This approach makes the
+    variance simpler to compute. The distance between a data vector `x`
+    and its projected version `Px` is the angle between `x` and `Px`
+    modulo the cyclic group action. If projection is removal of the last
+    component, then `Px` is necessarily the optimal representative of
+    the coset, so the group action can be ignored.  Additionally, the
+    angle is given by :math:`\arccos(\sqrt{1 - \|x_n\|^2})` because the
+    first (n-1) components of `x` and `Px` agree.  Iteratively reducing
+    the dimension by one gives the principal lens coordinates. This
+    method does not directly store the principal lens _components_,
+    though they can be reconstructed from the sequence of singular
+    vectors `u` and rotation matrices `Q` described above.
+
+    See Also
+    --------
+    `rotate_to_pole()`
+
     """
 
     Y = X / LA.norm(X,axis=0)
 #    U, s, V = np.linalg.svd(Y)
     variance = []
+# TODO: implement the initial pass cutting out several dimensions at
+# once.
 #    if tol > 0:
 #        var_list = subspace_variance(U) # TODO: implement variance correctly
 #        k = # TODO: find first element in var_list greater than tol.
@@ -408,6 +463,10 @@ def lpca(X,dim,p,tol=-1):
         U,_,_ = LA.svd(Y)
         Q = rotate_to_pole(U[:,-1])
         Y = Q@Y
+        var = np.mean(np.arccos(acos_validate(np.abs(
+            np.sqrt(1 - Y[-1,:]*Y[-1,:].conj())
+        )))**2)
+        variance.append(var) # TODO: double-check the variance.
         Y = np.delete(Y, (-1), axis=0)
         # TODO: need to handle the case that the norm of a column,
         # post-deletion, is zero. (This does happen.) Note that a
@@ -418,17 +477,12 @@ def lpca(X,dim,p,tol=-1):
             raise ZeroDivisionError('Cannot normalize data. Reduction to '\
                 'dimension %d set a column to zero.' %Y.shape[0])
         Y = Y / LA.norm(Y, axis=0)
-        variance.append(lpca_variance(U,Y,p)) # TODO: fix this variance method.
-    # TODO: set all return variables.
-    return Y
+    # TODO: decide on type of return (tuple or dict).
+    return Y, variance
 
-def lpca_variance(U,Y,p):
-    # TODO
-    return 1
-
-def subspace_variance(U,Y,p):
-    # TODO
-    return 0
+# TODO
+#def subspace_variance(U,Y,p):
+#    return 0
 
 ###############################################################################
 # What I infer to be Luis' Lens PCA Algorithm
