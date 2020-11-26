@@ -436,6 +436,12 @@ def lpca(X,dim,p=2,tol=-1):
     though they can be reconstructed from the sequence of singular
     vectors `u` and rotation matrices `Q` described above.
 
+    References
+    ----------
+    .. [1] J. Perea and L. Polanco, "Coordinatizing Data with Lens
+        Spaces and Persistent Cohomology," arXiv:1905:00350,
+        https://arxiv.org/abs/1905.00350
+
     See Also
     --------
     `rotate_to_pole()`

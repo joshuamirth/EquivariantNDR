@@ -202,6 +202,173 @@ def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
     else:
         return F
 
+
+###############################################################################
+# Lens space utilities
+###############################################################################
+
+def g_action_matrix(p,d):
+    """Create a matrix corresponding to the action of Z_p on S^d. 
+        
+    Parameters
+    ----------
+    p : int
+        Root of unity to use for quotient, i.e. p = 5 corresponds to
+        5th roots of unity.
+    d : int
+        Dimension of sphere. Must be odd.
+
+    Returns
+    -------
+    omega : ndarray
+        Matrix defining the group action of Z_p on S^d. Always a
+        block-diagonal (trilinear), orthogonal matrix.
+    
+    """
+    if d%2 == 0:
+        raise ValueError('Sphere must be odd dimensional.')
+    theta = 2*np.pi/p
+    rot_block = np.array([[np.cos(theta),np.sin(theta)],[-np.sin(theta),np.cos(theta)]])
+    omega = np.zeros((d+1,d+1))
+    for i in range(0,d+1,2):
+        omega[i:i+2,i:i+2] = rot_block
+    return omega
+
+def lens_distance_matrix(Y,rotations,p):
+    """Find the true lens space distance matrix for a data.
+
+    Parameters
+    ----------
+    Y : ndarray (k*n)
+        Data on lens space with each column a data point. Complex valued
+        with unit-norm columns.
+    rotations : ndarray (n*n)
+        For each pair of data points, `(y_i,y_j)` an integer `s` between
+        `0` and `p` such that the arccosine of the complex inner product
+        :math:`\langle y_i, \omega^p y_j \rangle` gives the correct
+        distance.
+    p : int
+        Root of unity to use in computing distances.
+
+    Returns
+    -------
+    D : ndarray (n*n)
+        Distance matrix.
+
+    """
+
+    M = get_masks(rotations)
+    omega = np.exp(2j*np.pi/p)
+    D = sum(M[i]*(Y.T@(omega**i)*Y) for i in range(p))
+    return D
+ 
+def optimal_rotation_new(Y,p):
+    """Choose the correct representative from each equivalence class.
+
+    Parameters
+    ----------
+    Y : ndarray (d*n)
+        Data, with one COLUMN for each of the n data points in
+        d-dimensional space.
+    w : ndarray (d*d)
+        Rotation matrix for p-th root of unity.
+    p : int
+        Order of cyclic group.
+
+    Returns
+    -------
+    S : ndarray (n*n)
+        Correct power of w to use for each inner product. Satisfies
+            S + S.T = 0 (mod p)
+
+    """
+
+    # (I'm not convinced this method is actually better, algorithmically.)
+    # Convert Y to complex form:
+    Ycplx = Y[0::2] + 1j*Y[1::2]
+    cplx_ip = Ycplx.T@Ycplx.conjugate()
+    ip_angles = np.angle(cplx_ip)
+    ip_angles[ip_angles<0] += 2*np.pi   #np.angles uses range -pi,pi
+    root_angles = np.linspace(0,2*np.pi,p+1)
+    S = np.zeros(ip_angles.shape)
+    for i in range(ip_angles.shape[0]):
+        for j in range(ip_angles.shape[1]):
+            S[i,j] = np.argmin(np.abs(ip_angles[i,j] - root_angles))
+    S[S==p] = 0
+    S = S.T     # Want the angle to act on the second component.
+    return S
+
+def optimal_rotation(Y,omega,p):
+    maxYY = Y.T@Y
+    S = np.zeros(np.shape(Y.T@Y))
+    for i in range(1,p):
+        tmpYY = Y.T@mp(omega,i)@Y
+        S[tmpYY>maxYY] = i
+        maxYY = np.maximum(maxYY,tmpYY)
+    return S
+
+def get_masks(S,p):
+    """Turn matrix of correct powers into masks.
+
+    Parameters
+    ----------
+    S : ndarray (n,n)
+    p : int
+
+    Returns
+    M : list of ndarrays p*(n,n)
+
+    """
+    
+    M = []
+    for i in range(p):
+        M.append(S==i)
+    return M
+
+def complexify(Y):
+    """Convert data in 2k-dimensional real space to k-dimensional
+    complex space.
+
+    Parameters
+    ----------
+    Y : ndarray (2k,n)
+        Real-valued array of data. Number of rows must be even.
+
+    Returns
+    -------
+    Ycplx : ndarray (k,n)
+        Complex-valued array of data.
+
+    """
+
+    Ycplx = Y[0::2] + 1j*Y[1::2]
+    return Ycplx
+
+def realify(Y):
+    """Convert data in k-dimensional complex space to 2k-dimensional
+    real space.
+
+    Parameters
+    ----------
+    Y : ndarray (k,n)
+        Real-valued array of data, `k` must be even.
+
+    Returns
+    -------
+    Yreal : ndarray (2k,n)
+        Complex-valued array of data.
+
+    """
+
+    Yreal = np.zeros((2*Y.shape[0],Y.shape[1]))
+    Yreal[0::2] = np.real(Y)
+    Yreal[1::2] = np.imag(Y)
+    return Yreal
+
+###############################################################################
+# Highly Experimental Stuff
+###############################################################################
+
 def setup_fubini_study_cost(D,W):
     def F(Y):
         return (0.5*np.linalg.norm((Y.conj().T @ Y) * ((Y.conj().T @ Y).conj().T)
@@ -360,347 +527,4 @@ def FS_mds(
 #       S = S_new
         M = M_new
     return Y, cost_list
-
-
-###############################################################################
-# Lens space utilities
-###############################################################################
-
-def g_action_matrix(p,d):
-    """Create a matrix corresponding to the action of Z_p on S^d. 
-        
-    Parameters
-    ----------
-    p : int
-        Root of unity to use for quotient, i.e. p = 5 corresponds to
-        5th roots of unity.
-    d : int
-        Dimension of sphere. Must be odd.
-
-    Returns
-    -------
-    omega : ndarray
-        Matrix defining the group action of Z_p on S^d. Always a
-        block-diagonal (trilinear), orthogonal matrix.
-    
-    """
-    if d%2 == 0:
-        raise ValueError('Sphere must be odd dimensional.')
-    theta = 2*np.pi/p
-    rot_block = np.array([[np.cos(theta),np.sin(theta)],[-np.sin(theta),np.cos(theta)]])
-    omega = np.zeros((d+1,d+1))
-    for i in range(0,d+1,2):
-        omega[i:i+2,i:i+2] = rot_block
-    return omega
-
-def lens_distance_matrix(Y,rotations,p):
-    """Find the true lens space distance matrix for a data.
-
-    Parameters
-    ----------
-    Y : ndarray (k*n)
-        Data on lens space with each column a data point. Complex valued
-        with unit-norm columns.
-    rotations : ndarray (n*n)
-        For each pair of data points, `(y_i,y_j)` an integer `s` between
-        `0` and `p` such that the arccosine of the complex inner product
-        :math:`\langle y_i, \omega^p y_j \rangle` gives the correct
-        distance.
-    p : int
-        Root of unity to use in computing distances.
-
-    Returns
-    -------
-    D : ndarray (n*n)
-        Distance matrix.
-
-    """
-
-    M = get_masks(rotations)
-    omega = np.exp(2j*np.pi/p)
-    D = sum(M[i]*(Y.T@(omega**i)*Y) for i in range(p))
-    return D
- 
-def optimal_rotation_new(Y,p):
-    """Choose the correct representative from each equivalence class.
-
-    Parameters
-    ----------
-    Y : ndarray (d*n)
-        Data, with one COLUMN for each of the n data points in
-        d-dimensional space.
-    w : ndarray (d*d)
-        Rotation matrix for p-th root of unity.
-    p : int
-        Order of cyclic group.
-
-    Returns
-    -------
-    S : ndarray (n*n)
-        Correct power of w to use for each inner product. Satisfies
-            S + S.T = 0 (mod p)
-
-    """
-
-    # (I'm not convinced this method is actually better, algorithmically.)
-    # Convert Y to complex form:
-    Ycplx = Y[0::2] + 1j*Y[1::2]
-    cplx_ip = Ycplx.T@Ycplx.conjugate()
-    ip_angles = np.angle(cplx_ip)
-    ip_angles[ip_angles<0] += 2*np.pi   #np.angles uses range -pi,pi
-    root_angles = np.linspace(0,2*np.pi,p+1)
-    S = np.zeros(ip_angles.shape)
-    for i in range(ip_angles.shape[0]):
-        for j in range(ip_angles.shape[1]):
-            S[i,j] = np.argmin(np.abs(ip_angles[i,j] - root_angles))
-    S[S==p] = 0
-    S = S.T     # Want the angle to act on the second component.
-    return S
-
-def optimal_rotation(Y,omega,p):
-    maxYY = Y.T@Y
-    S = np.zeros(np.shape(Y.T@Y))
-    for i in range(1,p):
-        tmpYY = Y.T@mp(omega,i)@Y
-        S[tmpYY>maxYY] = i
-        maxYY = np.maximum(maxYY,tmpYY)
-    return S
-
-def get_masks(S,p):
-    """Turn matrix of correct powers into masks.
-
-    Parameters
-    ----------
-    S : ndarray (n,n)
-    p : int
-
-    Returns
-    M : list of ndarrays p*(n,n)
-
-    """
-    
-    M = []
-    for i in range(p):
-        M.append(S==i)
-    return M
-
-def acos_validate(M):
-    """Replace values in M outside of domain of acos with +/- 1."""
-    big_vals = M >= 1.0
-    M[big_vals] = 1.0
-    small_vals = M <= -1.0
-    M[small_vals] = -1.0
-    return M
-
-def complexify(Y):
-    """Convert data in 2k-dimensional real space to k-dimensional
-    complex space.
-
-    Parameters
-    ----------
-    Y : ndarray (2k,n)
-        Real-valued array of data. Number of rows must be even.
-
-    Returns
-    -------
-    Ycplx : ndarray (k,n)
-        Complex-valued array of data.
-
-    """
-
-    Ycplx = Y[0::2] + 1j*Y[1::2]
-    return Ycplx
-
-def realify(Y):
-    """Convert data in k-dimensional complex space to 2k-dimensional
-    real space.
-
-    Parameters
-    ----------
-    Y : ndarray (k,n)
-        Real-valued array of data, `k` must be even.
-
-    Returns
-    -------
-    Yreal : ndarray (2k,n)
-        Complex-valued array of data.
-
-    """
-
-    Yreal = np.zeros((2*Y.shape[0],Y.shape[1]))
-    Yreal[0::2] = np.real(Y)
-    Yreal[1::2] = np.imag(Y)
-    return Yreal
-
-###############################################################################
-# Lens PCA Algorithm
-###############################################################################
-
-def lpca(X,k,p=2):
-    """Lens PCA method adapted from Luis's code.
-
-    Performs a PCA type reduction in lens spaces :math:`L^n_p`. The
-    construction is given in detail in [1]_. Primarily used here as a
-    means of computing an initial guess for lens MDS. Because LPCA is
-    inherently linear it sometimes fails to preserve topological
-    structure that MDS can recover.
-
-    Parameters
-    ----------
-    X : ndarray (d * n)
-        Matrix of data on an odd-dimensional sphere. May either be given
-        as a complex matrix with unit-norm columns or as a real matrix
-        with unit norm columns. In the latter case `d` must be even.
-    k : int
-        Complex dimension into which to reduce data. Thus the output
-        lives on a quotient of the `k-1`-sphere in C^k. Must be less
-        than the dimension of the original matrix, so `k < d`.
-    p : int
-        Cyclic group to use in the lens space.
-
-    Returns
-    -------
-    Y : ndarray (k * n)
-        Output data matrix from Lens PCA algorithm. Each column is a
-        data point on the `(k-1)`-sphere as a subset of C^(k). `Y` will
-        be a complex matrix if the input is complex, and a real matrix
-        if the input is real.
-
-    Notes
-    -----
-    When ``p == 2``, this should be identical to PPCA.
-
-    Examples
-    --------
-    
-    >>> X = numpy.random.rand(6,8)
-    >>> Xcplx = Y[0::2] + 1j*Y[1::2]
-    >>> Y = lens_mds.lpca(Xcplx,2,3)
-
-    References
-    ----------
-    .. [1] J. Perea and L. Polanco, "Coordinatizing Data with Lens
-        Spaces and Persistent Cohomology," arXiv:1905:00350,
-        https://arxiv.org/abs/1905.00350
-
-    """
-
-    isreal = np.isrealobj(X)
-    if isreal:
-        if X.shape[0]%2 != 0:
-            raise ValueError('X must be complex or have an even number '\
-                'of real dimensions.')
-        else:
-            X = X[0::2] + 1j*X[1::2]
-    V = lens_components(X)
-    Y = V[:,0:k].conj().T@X
-    Y = Y/LA.norm(Y,axis=0)
-    # TODO: return real output when input is real.
-    # TODO: consider adding variance captured as a second return value.
-    return Y
- 
-def lens_components(Y):
-    """Best low-dimensional lens-space representation for dataset Y.
-
-    Parameters
-    ----------
-    Y : ndarray (d*n)
-        Set of data on sphere with each column a data point. Y must be
-        complex, with each column having unit norm.
-
-    Returns
-    -------
-    V : ndarray (d*d)
-        Basis corresponding to optimal projection. Vectors are sorted
-        corresponding to the amount of variance captured by lens-space
-        projection onto the corresponding subspace. The first k vectors
-        thus correspond to the optimal k-dimensional representation.
-
-    """
-
-    # Initialize:
-    #   Vn = smallest eigenvec of Y@Y.†
-    #   U = remaining evecs (which form ON basis for Vn¬)
-    # Loop:
-    #   V{n-1} = U@(smallest evec of U†Y, normalized)
-    #   U = ON basis for (V{n-1},Vn)¬
-    # Finish:
-    #   V1 = last vector for ON basis
-
-    # Initialize:
-    evals, evecs = LA.eigh(Y@Y.conj().T)
-    d = evecs.shape[0]
-    V = evecs[:,-1]     # With eigh last eigenvector ~ smallest eigenvalue.
-    V = np.reshape(V,(-1,1))
-    U = evecs[:,0:-1]   # Remaining eigenvecs form ON basis for perp space.
-    # Loop:
-    for k in range(d-1,0,-1):
-        UY = U.conj().T@Y
-        UY = UY/LA.norm(UY,axis=0)
-        tmp_evals, tmp_evecs = LA.eigh(UY@UY.conj().T)
-        Vk = U@tmp_evecs[:,-1]
-        Vk = np.reshape(Vk,(-1,1))
-        V = np.hstack((Vk,V))
-        U = ONperp(V)
-    return V
-
-def ONperp(V):
-    """Find an orthonormal basis for orthogonal complement of subspace.
-
-    Takes a basis `V` for a subspace of :math:`\mathbb{C}^d` and find an
-    orthonormal basis for its orthogonal complement.
-
-    Parameters
-    ----------
-    V : ndarray (d*k)
-        Vectors forming a basis for a k-dimensional subspace. Columns of
-        `V` must be linearly independent (and thus k < d).
-    
-    Returns
-    -------
-    U : ndarray (d*(d-k))
-        Vectors forming a basis for the perp-space of `V`. Each column
-        of `U` is orthogonal to each vector in `V` and each other column
-        of `U`. If `V` has unit-norm columns, then [U,V] is orthonormal.
-        If `V` is complex, then `U` is orthogonal to `V` with respect to
-        the complex inner product.
-
-    Notes
-    -----
-
-    A vector `u` is orthogonal to each column of `V` iff ``V.T@u = 0``.
-    Thus a basis for the orthogonal complement of `V` is a basis for the
-    nullspace of `V.T`, which is given by the eigenvector corresponding
-    to eigenvalue zero.
-
-    Examples
-    --------
-    >>> V = np.array([[1,0,],[0,0,],[0,1]])
-    >>> lens_mds.ONperp(V)
-    array([[ 0.],
-       [-1.],
-       [ 0.]])
-
-    Note that the result may differ by a sign from the expected value.
-
-    >>> V = np.random.rand(4,2)
-    >>> U = lens_mds.ONperp(V)
-    >>> np.allclose(U.T@V, np.zeros((2,2)))
-    True
-
-    `U` is orthogonal to `V`.
-
-    >>> V = np.random.rand(4,2)
-    >>> V = V/np.linalg.norm(V,axis=0)
-    >>> B = np.hstack((lens_mds.ONperp(V),V))
-    >>> np.allclose(B.T@B,np.eye(4))
-    True
-
-    """
-
-    d = V.shape[0]
-    k = V.shape[1]
-    U,_,_ = LA.svd(V)
-    U = U[:,k:d]
-    return U
 
