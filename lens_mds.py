@@ -30,7 +30,8 @@ def lmds(
     autograd = False,
     appx = False,
     minstepsize=1e-10,
-    mingradnorm=1e-6
+    mingradnorm=1e-6,
+    singlestep = False
 ):
     """Lens space multi-dimensional scaling algorithm.
 
@@ -87,9 +88,36 @@ def lmds(
     cost_list = [cost(Y.T)]
     manifold = Oblique(d+1,m) # Short, wide matrices.
     if pmo_solve == 'cg':
-        solver = ConjugateGradient(
-                minstepsize=minstepsize,
-                mingradnorm=mingradnorm)
+        if singlestep:
+            solver = ConjugateGradient(
+                    minstepsize=minstepsize,
+                    mingradnorm=mingradnorm,
+                    maxiter=2)
+        else:
+            solver = ConjugateGradient(
+                    minstepsize=minstepsize,
+                    mingradnorm=mingradnorm)
+    elif pmo_solve == 'sd':
+        if singlestep:
+            solver = SteepestDescent(
+                    minstepsize=minstepsize,
+                    mingradnorm=mingradnorm,
+                    maxiter=2)
+        else:
+            solver = SteepestDescent(
+                    minstepsize=minstepsize,
+                    mingradnorm=mingradnorm)
+    elif pmo_solve == 'tr':
+        if singlestep:
+            solver = TrustRegions(
+                    minstepsize=minstepsize,
+                    mingradnorm=mingradnorm,
+                    maxiter=2)
+        else:
+            solver = TrustRegions(
+                    minstepsize=minstepsize,
+                    mingradnorm=mingradnorm)
+
     elif pmo_solve == 'nm':
         solver = NelderMead()
     for i in range(0,max_iter):
@@ -127,6 +155,12 @@ def lmds(
 #       true_cost_list.append(true_cost(Y_new.T))
         # Do an SVD to get the correlation matrix on the sphere.
         # Y,s,vh = LA.svd(out_matrix,full_matrices=False)
+        D_fs = fubinistudy(complexify(Y_new.T))
+        Z = np.where(D_fs < 1e-6)
+        if not np.allclose(Z[0],Z[1]):
+            print('WARNING: There are nearly colinear points (D_FS < 1e-6).')
+        else:
+            print('No colinear points found.')
         if verbosity > 0:
             print('Through %i iterations:' %(i+1))
 #           print('\tTrue cost: %2.2f' %true_cost(Y_new.T))
@@ -145,9 +179,9 @@ def lmds(
 #           break
         if verbosity > 2:
             print(Y_new.T)
-        if percent_cost_diff < .0001:
-            print('No significant cost improvement. Stopping iterations.')
-            break
+#       if percent_cost_diff < .0001:
+#           print('No significant cost improvement. Stopping iterations.')
+#           break
         if i == max_iter:
             print('Maximum iterations reached.')
         # Update variables:
@@ -225,6 +259,8 @@ def g_action_matrix(p,d):
         block-diagonal (trilinear), orthogonal matrix.
     
     """
+
+    # TODO: change this so that dimension is of ambient space.
     if d%2 == 0:
         raise ValueError('Sphere must be odd dimensional.')
     theta = 2*np.pi/p
