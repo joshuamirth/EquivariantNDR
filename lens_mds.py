@@ -241,6 +241,33 @@ def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
 # Lens space utilities
 ###############################################################################
 
+def real_ip(u,v):
+    """Real inner product of complex vectors."""
+    return np.real(u)@np.real(v) + np.imag(u)@np.imag(v)
+
+def complex_as_matrix(z,n):
+    """Represent a complex number as a matrix.
+    
+    Parameters
+    ----------
+    z : complex float
+    n : int (even)
+    
+    Returns
+    -------
+    Z : ndarray (n,n)
+        Real-valued n*n tri-diagonal matrix representing z in the ring of n*n matrices.
+        
+    """
+    
+    Z = np.zeros((n,n))
+    ld = np.zeros(n-1)
+    ld[0::2] = np.imag(z)
+    np.fill_diagonal(Z[1:], ld)
+    Z = Z - Z.T
+    np.fill_diagonal(Z, np.real(z))
+    return Z
+
 def g_action_matrix(p,d):
     """Create a matrix corresponding to the action of Z_p on S^d. 
         
