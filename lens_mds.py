@@ -423,7 +423,10 @@ def realify(Y):
 
     """
 
-    Yreal = np.zeros((2*Y.shape[0],Y.shape[1]))
+    if Y.ndim == 1:
+        Yreal = np.zeros(2*Y.shape[0])
+    else:
+        Yreal = np.zeros((2*Y.shape[0],Y.shape[1]))
     Yreal[0::2] = np.real(Y)
     Yreal[1::2] = np.imag(Y)
     return Yreal
