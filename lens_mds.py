@@ -243,7 +243,8 @@ def setup_sum_cost(omega,M,D,W,p,return_derivatives=False):
 
 def real_ip(u,v):
     """Real inner product of complex vectors."""
-    return np.real(u)@np.real(v) + np.imag(u)@np.imag(v)
+    ip = np.real(np.vdot(u,v))
+    return ip
 
 def complex_as_matrix(z,n):
     """Represent a complex number as a matrix.
