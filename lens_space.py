@@ -5,6 +5,9 @@
 
 import numpy as np
 from numpy import linalg as LA
+from colorama import Fore
+from colorama import Style
+
 
 #####################################}}}
 # GEOMETRIC METHODS FOR LENS SPACES #{{{
@@ -76,7 +79,9 @@ def lens_exp(x, v, p=3):
     
     """
     
-    if np.allclose(v, np.zeros(v.shape)):
+    #if np.allclose(v, np.zeros(v.shape)):
+    if LA.norm(v) < 1e-10:
+        print('Tangent vector approximately zero.')
         y_opt = x
         return y_opt
     if np.abs(real_ip(x,v)) > 1e-4:
@@ -110,12 +115,15 @@ def lens_dist(x, y, p=3):
     d = dist_rep(x, y, p=p)[0]
     return d
 
-def nearest_point(x, y, r, p=3, tol=1e-6):
+def nearest_point(x, y, r, p=3, tol=1e-6, verbosity=1):
     """Construct the nearest point to y on the circle of radius r at x."""
     
     y_hat = lens_exp(x, r*lens_log(x, y, p=p, normalize=True), p=p)
-    d,_,_ = dist_rep(x, y_hat, p=p)
+    d = lens_dist(x, y_hat, p=p)
     if np.abs(d - r) > tol:
+        print(f'{Fore.RED} Unable to extend with geodesic to distance %2.6f. '\
+            f'Extension along geodesic reached distance %2.6f. Attempting to '\
+            f'use nearest point instead.{Style.RESET_ALL}' %(r, d))
         y_hat = cpn_extend(x, y, r)
     # v = lens_log(proj, y, p=p)
     #t_up = 1.0
@@ -199,16 +207,36 @@ def lens_weiszfeld(
     maxiters=500,
     verbosity=0
 ):
-    """Weiszfeld algorithm on lens space.
+    """Weiszfeld algorithm in lens space.
+
+    Computes the median (point minimizing the-optionally weighted-sum of
+    distances) of a collection of points in lens space :math:`L^n_p` via
+    the modified Weiszfeld algorithm for Riemannian manifolds [1]_,
+    [2]_. In detail, if `d(-,-)` is the metric, then we want :math:`y^*`
+    defined by 
+
+    .. math:: \sum_{i=1}^N d(y^*,x_i) = \min_y \sum_{i=1}^N d(y^*,x_i)
+
+    The Weiszfeld algorithm is an iterative approach to this
+    minimization which is significantly faster than gradient descent.
+    The version implemented here follows Ostresh in order to correctly
+    handle collisions with vertices, and follows the adaptation by
+    Fletcher, et al. to Riemannain manifolds. Convergence to a unique
+    :math:`y^*` in this setting is guaranteed if the diameter of the
+    point cloud `X` is not too large relative to the sectional
+    curvature.
     
     Parameters
     ----------
     W : ndarray (n,)
         Weights.
     X : complex ndarray (k,n)
-        Point set on lens space as `n` column vectors. Columns must have unit norm.
+        Point set on lens space as `n` column vectors. Columns must have
+        unit norm.
     m : complex ndarray (k,)
         Initial point.
+    p : int, optional
+        Order of cyclic group. Default is `p=3`.
     alpha : float
         Step size. To guarantee convergence needs to be in [1,2].
     mincostdiff : float, optional
@@ -228,7 +256,18 @@ def lens_weiszfeld(
     -------
     m : complex ndarray (k,)
         Median of points `X`.
-        
+       
+    References
+    ----------
+
+    .. [1] Fletcher, Thomas and Venkatasubramanian, Suresh, and Joshi,
+        Sarang, "The Geometric Median on Riemannian Manifolds with
+        Application to Robust Atlas Estimation," Neuroimage, March 2009,
+        Vol.  45. 
+    .. [2] Ostresh, Lawrence M, "On the Convergence of a Class of
+        Iterative Methods for Solving the Weber Location Problem,"
+        Operation Research, Jul-Aug 1978, Vol 26., No. 4 pp. 597-609.
+ 
     """
     
     assert X.ndim == 2
@@ -310,7 +349,8 @@ def lens_weiszfeld(
             break
     return m
 
-def lens_place(y,
+def lens_place(
+    y,
     X,
     Dy,
     mincostdiff=1e-10,
@@ -326,7 +366,7 @@ def lens_place(y,
     X : ndarray (k,n)
         Set of data points.
     Dy : ndarray (n,)
-        Distances from `y` to each `X.`
+        Goal distances from `y` to each `X.`
     mincostdiff : float, optional
         Threshold for convergence.
     p : int, optional
