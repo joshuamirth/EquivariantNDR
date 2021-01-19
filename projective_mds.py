@@ -1,7 +1,9 @@
 """ Dim reduction on RPn using an MDS-type method. """
-import matlab.engine    # for LRCM MIN.
-import autograd.numpy as np
-import autograd.numpy.linalg as LA
+# import matlab.engine    # for LRCM MIN.
+#import autograd.numpy as np
+#import autograd.numpy.linalg as LA
+import numpy as np
+import numpy.linalg as LA
 import scipy.io as io
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
