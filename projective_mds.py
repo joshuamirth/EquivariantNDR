@@ -524,7 +524,6 @@ def setup_cost(D,S,return_derivatives=False):
 
     W = distance_to_weights(D)
     C = S*np.cos(D)
-#   @pymanopt.function.Autograd
     def F(Y):
         """Weighted Frobenius norm cost function."""
         return 0.5*np.linalg.norm(W*(C-Y.T@Y))**2
@@ -534,10 +533,7 @@ def setup_cost(D,S,return_derivatives=False):
     def ddF(Y,H):
         """Second derivative (Hessian) of weighted Frobenius norm cost."""
         return 2*((W**2*(Y.T@Y-C))@H + (W**2*(Y@H.T + H@Y.T))@Y)
-    if return_derivatives:
-        return F, dF, ddF
-    else:
-        return F
+    return F, dF, ddF
 
 ###############################################################################
 # Old Stuff
