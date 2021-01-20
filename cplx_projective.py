@@ -11,60 +11,7 @@ from pymanopt.solvers import ConjugateGradient
 # Algorithm Components
 ###############################################################################
 
-def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
-    """Approximate a geodesic distance matrix.
-
-    Given a distance matrix uses either an epsilon neighborhood or a
-    k-NN algorithm to find nearby points, then builds a distance matrix
-    such that nearby points have their ambient distance as defined by
-    the original distance matrix, while far away points are given the
-    shortest path distance in the graph.
-   
-    Parameters
-    ----------
-    data : ndarray
-        Data as an n*2 matrix, assumed to lie on RP^n (i.e. S^n).
-    epsilon : float, optional
-        Radius of neighborhood when constructing graph. Default is ~pi/8.
-    k : int, optional
-        Number of nearest neighbors in k-NN graph. Default is -1 (i.e.
-        use epsilon neighborhoods).
-
-    Returns
-    -------
-    Dhat : ndarray
-        Square distance matrix matrix of the graph. Distances are
-        normalized to correspond to RP^n, i.e. Dhat is scaled so the
-        maximum distance is no larger than pi/2.
-
-    Raises
-    ------
-    ValueError
-        If the provided value of epsilon or k is too small, the graph
-        may not be connected, giving infinite values in the distance
-        matrix. A value error is raised if this occurs, as the later
-        algorithms do not handle infinite values smoothly.
-
-    """
-
-    # Use kNN. Sort twice to get nearest neighbour list.
-    if k > 0:
-        D_sort = np.argsort(np.argsort(D))
-        A = D_sort <= k
-        A = (A + A.T)/2
-    # Use epsilon neighborhoods.
-    else:
-        A = D<epsilon
-    G = csr_matrix(D*A)                   # Matrix representation of graph
-    Dg = floyd_warshall(G,directed=False)     # Path-length distance matrix
-    if np.isinf(np.max(Dg)):
-        raise ValueError('The distance matrix contains infinite values, ' +
-            'indicating that the graph is not connected. Try a larger value ' +
-            'of epsilon or k.')
-    Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
-    return Dhat
-
-def pmds(Y, D, max_iter=20, verbosity=1):
+def cp_mds(Y, D, max_iter=20, verbosity=1):
     """Projective multi-dimensional scaling algorithm.
 
     Detailed description in career grant, pages 6-7 (method 1).
@@ -150,15 +97,52 @@ def pmds(Y, D, max_iter=20, verbosity=1):
     return Y
 
 ###############################################################################
-# Projective space geometry tools
+# Complex projective space geometry tools
 ###############################################################################
 
-def projective_distance_matrix(Y):
-    """Construct the (exact) distance matrix of data Y on RP^d."""
-    S = np.sign(Y@Y.T)
-    M = S*(Y@Y.T)
+# Elements of complex projective space can be thought of as points on the
+# 2n-sphere modulo an equivalence relation. I will think of the first
+# n coordinates as the real part and the last n coordinates as the complex
+# part. All functions will work with this real representation of the vectors.
+# There is one conversion method in case of natural data with complex
+# representation. Additionally, all data points are thought of as column
+# vectors.
+
+def realify(Y):
+    """Convert data in n-dimensional complex space into 2n-dimensional real
+    space.
+    """
+
+    n = Y.shape[0]
+    Yreal = np.zeros(2*n)
+    Yreal[0:n] = np.real(Y)
+    Yreal[n:2*n] = np.imag(Y)
+    return Yreal
+
+def complexify(Y):
+    """Convert real 2n-dimensional points into n-dimensional complex vectors.
+    """
+
+    n = int(Y.shape[0]/2)
+    Ycplx = Y[0:n] + 1j*Y[n:2*n]
+    return Ycplx
+    
+def times_i(Y):
+    """Multiply the real representation of a complex vector by i."""
+    n = int(Y.shape[0]/2)
+    i_mtx = np.vstack(
+        (np.hstack((np.zeros((n, n)), -np.eye(n))),
+        np.hstack((np.eye(n), np.zeros((n, n)))))
+    )
+    iY = i_mtx@Y
+    return iY
+
+def complex_projective_distance_matrix(Y):
+    """Construct the (exact) distance matrix of data Y on CP^n."""
+    M = (Y.T@Y)**2 + (Y.T@times_i(Y))**2
+    M = np.sqrt(M)
     acos_validate(M)
-    D = np.arccos(M)    # Initial distance matrix
+    D = np.arccos(M)
     return D
 
 def acos_validate(M,tol=1e-6):
