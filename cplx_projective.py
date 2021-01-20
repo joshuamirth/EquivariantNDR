@@ -108,21 +108,28 @@ def cp_mds(Y, D, max_iter=20, verbosity=1):
 # representation. Additionally, all data points are thought of as column
 # vectors.
 
+def CPn_validate(Y):
+    """Check that Y is a valid element of CPn in the real representation."""
+    valid = ( np.isrealobj(Y) * (np.mod(Y.shape[0], 2) == 0))
+    if Y.ndim > 1:
+        valid *= np.allclose(LA.norm(Y, axis=0), np.ones(Y.shape[1]))
+    else:
+        valid *= np.allclose(LA.norm(Y), np.ones(Y.shape))
+    return valid
+
 def realify(Y):
     """Convert data in n-dimensional complex space into 2n-dimensional real
     space.
     """
-
-    n = Y.shape[0]
-    Yreal = np.zeros(2*n)
-    Yreal[0:n] = np.real(Y)
-    Yreal[n:2*n] = np.imag(Y)
+    Yreal = np.vstack((np.real(Y), np.imag(Y)))
     return Yreal
 
 def complexify(Y):
     """Convert real 2n-dimensional points into n-dimensional complex vectors.
     """
 
+    if np.mod(Y.shape[0], 2) != 0:
+        raise ValueError('Cannot convert odd-dimensional vector to complex.')
     n = int(Y.shape[0]/2)
     Ycplx = Y[0:n] + 1j*Y[n:2*n]
     return Ycplx
