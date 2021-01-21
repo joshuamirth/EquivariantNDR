@@ -1,6 +1,8 @@
 """ Dim reduction on RPn using an MDS-type method. """
-import numpy as np
-import numpy.linalg as LA
+import autograd.numpy as np
+import autograd.numpy.linalg as LA
+#import numpy as np
+#import numpy.linalg as LA
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
 import pymanopt
@@ -43,7 +45,7 @@ def cp_mds(Y, D, max_iter=20, v=1):
     num_points = Y.shape[1]
     start_cost_list = []
     end_cost_list = []
-    loop_cost_diff = np.inf
+    loop_diff = np.inf
     percent_cost_diff = 100
     # rank = LA.matrix_rank(Y)
     vprint('Finding optimal configuration in CP^%i.'
@@ -54,10 +56,16 @@ def cp_mds(Y, D, max_iter=20, v=1):
     # Oblique manifold is dim*num_points matrices with unit-norm columns.
     solver = ConjugateGradient()
     for i in range(0, max_iter):
-        cost, egrad, ehess = setup_cost(D, S)   # TODO: autograd version
+        # AUTOGRAD VERSION
+        cost = setup_autograd_cost(D, Sreal, Simag, int(dim/2))
+        # ANALYTIC VERSION:
+        #cost, egrad, ehess = setup_cost(D, Sreal, Simag)
         start_cost_list.append(cost(Y))
-        problem = pymanopt.Problem(manifold, cost, egrad=egrad, ehess=ehess,
-            verbosity=v)    # TODO: adjust for autograd
+        # AUTOGRAD VERSION:
+        problem = pymanopt.Problem(manifold, cost, verbosity=v)
+        # ANALYTIC VERSION:
+        #problem = pymanopt.Problem(manifold, cost, egrad=egrad, ehess=ehess,
+        #   verbosity=v)
         Y_new = solver.solve(problem, x=Y)
         end_cost_list.append(cost(Y_new))
         Sreal_new, Simag_new = norm_rotations(Y_new)
@@ -198,6 +206,19 @@ def distance_to_weights(D):
     W = np.sqrt((1 - np.cos(D)**2 + np.eye(D.shape[0]))**-1)
     return W
 
+def setup_autograd_cost(D, Sreal, Simag, n):
+    i_mtx = np.vstack(
+        (np.hstack((np.zeros((n, n)), -np.eye(n))),
+        np.hstack((np.eye(n), np.zeros((n, n)))))
+    )
+    W = distance_to_weights(D)
+    Creal = Sreal*np.cos(D)
+    Cimag = Simag*np.cos(D)
+    def cost(Y):
+        """Weighted Frobenius norm cost function."""
+        return 0.5*(np.linalg.norm(W*(Creal - Y.T@Y))**2 + np.linalg.norm(W*(Cimag - Y.T@(i_mtx@Y)))**2)
+    return cost
+
 def setup_cost(D, Sreal, Simag):
     """Create the cost functions for pymanopt, using explicit derivatives.
 
@@ -234,7 +255,6 @@ def setup_cost(D, Sreal, Simag):
     W = distance_to_weights(D)
     Creal = Sreal*np.cos(D)
     Cimag = Simag*np.cos(D)
-#   @pymanopt.function.Autograd
     def cost(Y):
         """Weighted Frobenius norm cost function."""
         return 0.5*(LA.norm(W*(Creal - Y.T@Y))**2 + LA.norm(W*(Cimag - Y.T@times_i(Y)))**2)
