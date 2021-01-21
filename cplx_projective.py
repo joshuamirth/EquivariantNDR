@@ -11,89 +11,81 @@ from pymanopt.solvers import ConjugateGradient
 # Algorithm Components
 ###############################################################################
 
-def cp_mds(Y, D, max_iter=20, verbosity=1):
+def cp_mds(Y, D, max_iter=20, v=1):
     """Projective multi-dimensional scaling algorithm.
 
     Detailed description in career grant, pages 6-7 (method 1).
 
     Parameters
     ----------
-    Y : ndarray
-        Initial guess of points in RP^k. Result will lie on RP^k for
-        same k as the initial guess.
-    D : ndarray
+    Y : ndarray (2n+2, k)
+        Initial guess of `k` points in CP^n. Result will lie on CP^n for
+        same `n` as the initial guess. (Each column is a data point.)
+    D : ndarray (k, k)
         Square distance matrix determining cost.
     max_iter : int, optional
         Number of times to iterate the loop. Will eventually be updated
         to a better convergence criterion. Default is 20.
-    verbosity : int, optional
-        If positive, print output relating to convergence conditions at each
-        iteration.
-    solve_prog : string, optional
-        Choice of algorithm for low-rank correlation matrix reduction.
-        Options are "pymanopt" or "matlab", default is "pymanopt".
+    v : int, optional
+        Verbosity. If positive, print output relating to convergence
+        conditions at each iteration.
 
     Returns
     -------
-    Y : ndarray
-        Optimal configuration of points in RP^k.
+    Y : ndarray (2n+2, k)
+        Optimal configuration of points in CP^n.
     C : list
         List of costs at each iteration.
 
     """
 
-    num_points = Y.shape[0]
+    dim = Y.shape[0]
+    num_points = Y.shape[1]
     start_cost_list = []
     end_cost_list = []
     loop_cost_diff = np.inf
     percent_cost_diff = 100
-    rank = LA.matrix_rank(Y)
-    vprint('Finding projection onto RP^%i.' %(rank-1), 1, verbosity)
+    # rank = LA.matrix_rank(Y)
+    vprint('Finding optimal configuration in CP^%i.'
+        %((dim-2)//2), 1, v)
     W = distance_to_weights(D)
-    S = np.sign(Y@Y.T)
-    C = S*np.cos(D)
-    if np.sum(S == 0) > 0:
-        print('Warning: Some initial guess vectors are orthogonal, this may ' +
-            'cause issues with convergence.')
-    manifold = Oblique(rank, num_points) # Short, wide matrices.
+    Sreal, Simag = norm_rotations(Y)
+    manifold = Oblique(dim, num_points)
+    # Oblique manifold is dim*num_points matrices with unit-norm columns.
     solver = ConjugateGradient()
     for i in range(0, max_iter):
-        cost, egrad, ehess = setup_cost(D, S)
-        start_cost_list.append(cost(Y.T))
+        cost, egrad, ehess = setup_cost(D, S)   # TODO: autograd version
+        start_cost_list.append(cost(Y))
         problem = pymanopt.Problem(manifold, cost, egrad=egrad, ehess=ehess,
-            verbosity=verbosity)
-        Y_new = solver.solve(problem, x=Y.T)
-        Y_new = Y_new.T     # Y should be tall-skinny
-        end_cost_list.append(cost(Y_new.T))
-        S_new = np.sign(Y_new@Y_new.T)
-        C_new = S_new*np.cos(D)
-        S_diff = ((LA.norm(S_new - S))**2)/4
-        percent_S_diff = 100*S_diff/S_new.size
-        iteration_cost_diff = start_cost_list[i] - end_cost_list[i]
+            verbosity=v)    # TODO: adjust for autograd
+        Y_new = solver.solve(problem, x=Y)
+        end_cost_list.append(cost(Y_new))
+        Sreal_new, Simag_new = norm_rotations(Y_new)
+        S_diff = LA.norm(Sreal_new - Sreal)**2 + LA.norm(Simag_new - Simag)**2
+        iter_diff = start_cost_list[i] - end_cost_list[i]
         if i > 0:
-            loop_cost_diff = end_cost_list[i-1] - end_cost_list[i]
-            percent_cost_diff = 100*loop_cost_diff/end_cost_list[i-1]
-        vprint('Through %i iterations:' %(i+1), 1, verbosity)
-        vprint('\tCost at start: %2.4f' %start_cost_list[i], 1, verbosity)
-        vprint('\tCost at end: %2.4f' %end_cost_list[i], 1, verbosity)
-        vprint('\tCost reduction from optimization: %2.4f' %iteration_cost_diff, 1, verbosity)
-        vprint('\tCost reduction over previous loop: %2.4f' %loop_cost_diff, 1, verbosity)
-        vprint('\tPercent cost difference: % 2.4f' %percent_cost_diff, 1, verbosity)
-        vprint('\tPercent Difference in S: % 2.2f' %percent_S_diff, 1, verbosity)
-        vprint('\tDifference in cost matrix: %2.2f' %(LA.norm(C-C_new)), 1, verbosity)
-        if S_diff < 1:
-            vprint('No change in S matrix. Stopping iterations', 0, verbosity)
+            loop_diff = end_cost_list[i-1] - end_cost_list[i]
+            percent_cost_diff = 100*loop_diff/end_cost_list[i-1]
+        vprint('Through %i iterations:' %(i+1), 1, v)
+        vprint('\tCost at start: %2.4f' %start_cost_list[i], 1, v)
+        vprint('\tCost at end: %2.4f' %end_cost_list[i], 1, v)
+        vprint('\tCost reduction from optimization: %2.4f' %iter_diff, 1, v)
+        vprint('\tCost reduction over previous loop: %2.4f' %loop_diff, 1, v)
+        vprint('\tPercent cost difference: % 2.4f' %percent_cost_diff, 1, v)
+        vprint('\tDifference in S: % 2.2f' %S_diff, 1, v)
+        if S_diff < .0001:
+            vprint('No change in S matrix. Stopping iterations', 0, v)
             break
         if percent_cost_diff < .0001:
             vprint('No significant cost improvement. Stopping iterations.', 0,
-                verbosity)
+                v)
             break
         if i == max_iter:
-            vprint('Maximum iterations reached.', 0, verbosity)
+            vprint('Maximum iterations reached.', 0, v)
         # Update variables:
         Y = Y_new
-        C = C_new
-        S = S_new
+        Sreal = Sreal_new
+        Simag = Simag_new
     return Y
 
 ###############################################################################
@@ -200,9 +192,10 @@ def acos_validate(M,tol=1e-6):
 
 def distance_to_weights(D):
     """Compute the weight matrix W from the distance matrix D."""
-    W_inv = (1 - np.cos(D)**2)     
-    W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1
-        - np.eye(D.shape[0],D.shape[1]))
+    # Note that the formula for weights is undefined on the diagonal of
+    # D, that is, on any element of D equal to zero. Here we set the
+    # diagonal to ones, but in the real projective version we use zero.
+    W = np.sqrt((1 - np.cos(D)**2 + np.eye(D.shape[0]))**-1)
     return W
 
 def setup_cost(D, Sreal, Simag):
