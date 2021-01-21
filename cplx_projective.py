@@ -144,13 +144,23 @@ def times_i(Y):
     iY = i_mtx@Y
     return iY
 
-def complex_projective_distance_matrix(Y):
+def CPn_distance_matrix(Y):
     """Construct the (exact) distance matrix of data Y on CP^n."""
     M = (Y.T@Y)**2 + (Y.T@times_i(Y))**2
     M = np.sqrt(M)
     acos_validate(M)
     D = np.arccos(M)
     return D
+
+def norm_rotations(Y):
+    """Compute a matrix S of complex numbers such that |<y_i, y_j>| is
+    given by <y_i, s_ij y_j>."""
+    sreal = Y.T @ Y
+    simag = Y.T @ times_i(Y)
+    norms = np.sqrt(sreal**2 + simag**2)
+    sreal = sreal / norms
+    simag = simag / norms
+    return sreal, simag
 
 def acos_validate(M,tol=1e-6):
     """Replace values outside of domain of acos with +/- 1.
@@ -195,7 +205,7 @@ def distance_to_weights(D):
         - np.eye(D.shape[0],D.shape[1]))
     return W
 
-def setup_cost(D,S,return_derivatives=False):
+def setup_cost(D, Sreal, Simag):
     """Create the cost functions for pymanopt, using explicit derivatives.
 
     Pymanopt performs optimization routines on manifolds, which require
@@ -212,8 +222,10 @@ def setup_cost(D,S,return_derivatives=False):
     ----------
     D : ndarray (n, n)
         Matrix of target distances.
-    S : ndarray (n, n)
-        Matrix of signs.
+    Sreal : ndarray (n, n)
+        Real parts of the "signs."
+    Simag : ndarray (n, n)
+        Imaginary parts of the "signs."
 
     Returns
     -------
@@ -227,11 +239,12 @@ def setup_cost(D,S,return_derivatives=False):
     """
 
     W = distance_to_weights(D)
-    C = S*np.cos(D)
+    Creal = Sreal*np.cos(D)
+    Cimag = Simag*np.cos(D)
 #   @pymanopt.function.Autograd
     def cost(Y):
         """Weighted Frobenius norm cost function."""
-        return 0.5*np.linalg.norm(W*(C-Y.T@Y))**2
+        return 0.5*(LA.norm(W*(Creal - Y.T@Y))**2 + LA.norm(W*(Cimag - Y.T@times_i(Y)))**2)
     def grad(Y):
         """Derivative of weighted Frobenius norm cost."""
         return 2*Y@(W**2*(Y.T@Y-C))
@@ -252,4 +265,30 @@ def vprint(msg, level, verbosity):
     """
     if verbosity >= level:
         print(msg)
+
+def hopf(Y):
+    """
+    Map from CP^1 in C^2 = R^4 to the standard representation of S^2
+    in R^3 using the Hopf fibration. This is useful for visualization
+    purposes.
+
+    Parameters
+    ----------
+    Y : ndarray (4, k)
+        Array of `k` points in CP^1 < R^4 = C^2.
+
+    Returns
+    -------
+    S : ndarray (3, k)
+        Array of `k` points in S^2 < R^3.
+ 
+    """
+   
+    if Y.shape[0] != 4:
+        raise ValueError('Points must be in R^4 to apply Hopf map!.')
+    S = np.vstack((
+        [2*Y[0,:]*Y[1,:] + 2*Y[2,:]*Y[3,:]],
+        [-2*Y[0,:]*Y[3,:] + 2*Y[1,:]*Y[2,:]],
+        [Y[0,:]**2 + Y[2,:]**2 - Y[1,:]**2 - Y[3,:]**2]))
+    return S
 
