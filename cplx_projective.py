@@ -206,6 +206,23 @@ def distance_to_weights(D):
     W = np.sqrt((1 - np.cos(D)**2 + np.eye(D.shape[0]))**-1)
     return W
 
+def distance_to_sq_weights(D):
+    """Weights to use with cos^2(D) error form."""
+    W = 1/np.sin(2*(D+np.eye(D.shape[0]))) + np.eye(D.shape[0])
+    return W
+
+def setup_autograd_sq_cost(D, n):
+    W = distance_to_sq_weights(D)
+    C = np.cos(D)**2
+    i_mtx = np.vstack(
+        (np.hstack((np.zeros((n, n)), -np.eye(n))),
+        np.hstack((np.eye(n), np.zeros((n, n)))))
+    )
+    cj_mtx = np.block([[np.eye(n), np.zeros((n, n))], [np.zeros((n, n)), -np.eye(n)]])
+    def cost(Y):
+        return 0.5*np.linalg.norm(((cj_mtx@Y).T @ Y) * (Y.T @ (cj_mtx@Y)) - C)**2
+    return cost
+
 def setup_autograd_cost(D, Sreal, Simag, n):
     i_mtx = np.vstack(
         (np.hstack((np.zeros((n, n)), -np.eye(n))),
