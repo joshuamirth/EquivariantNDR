@@ -6,7 +6,7 @@ import autograd.numpy.linalg as LA
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
 import pymanopt
-from pymanopt.manifolds import Oblique 
+from pymanopt.manifolds import Oblique, Product
 from pymanopt.solvers import ConjugateGradient
 
 ###############################################################################
@@ -95,6 +95,54 @@ def cp_mds(Y, D, max_iter=20, v=1):
         Sreal = Sreal_new
         Simag = Simag_new
     return Y
+
+def cp_mds_reg(Y, D, lam=1.0, v=1):
+    """Version of MDS in which "signs" are also an optimization parameter.
+
+    Rather than performing a full optimization and then resetting the
+    sign matrix, here we treat the signs as a parameter `A = [a_ij]` and
+    minimize the cost function
+        F(Y,A) = ||W*(Y^H(A*Y) - cos(D))||^2 + lambda*||A - Y^HY/|Y^HY| ||^2
+    Lambda is a regularization parameter we can experiment with. The
+    collection of data, `Y`, is treated as a point on the `Oblique`
+    manifold, consisting of `k*n` matrices with unit-norm columns. Since
+    we are working on a sphere in complex space we require `k` to be
+    even. The first `k/2` entries of each column are the real components
+    and the last `k/2` entries are the imaginary parts. 
+
+    Parameters
+    ----------
+    Y : ndarray (k, n)
+        Initial guess for data.
+    D : ndarray (k, k)
+        Goal distance matrix.
+    lam : float, optional
+        Weight to give regularization term.
+    v : int, optional
+        Verbosity
+
+    Returns
+    -------
+    Y_opt : ndarray (k, n)
+        Collection of points optimizing cost.
+
+    """
+
+    dim = Y.shape[0]
+    num_points = Y.shape[1]
+    W = distance_to_weights(D)
+    Sreal, Simag = norm_rotations(Y)
+    A = np.vstack((np.reshape(Sreal, (1, num_points**2)),
+        np.reshape(Simag, num_points**2)))
+    cp_manifold = Oblique(dim, num_points)
+    a_manifold = Oblique(2, num_points**2)
+    manifold = Product((cp_manifold, a_manifold))
+    solver = ConjugateGradient()
+    cost = setup_reg_autograd_cost(D, int(dim/2), num_points)
+    problem = pymanopt.Problem(cost=cost, manifold=manifold)
+    Yopt, Aopt = solver.solve(problem)
+    return Yopt, Aopt
+
 
 ###############################################################################
 # Complex projective space geometry tools
@@ -235,6 +283,24 @@ def setup_autograd_cost(D, Sreal, Simag, n):
         """Weighted Frobenius norm cost function."""
         return 0.5*(np.linalg.norm(W*(Creal - Y.T@Y))**2 + np.linalg.norm(W*(Cimag - Y.T@(i_mtx@Y)))**2)
     return cost
+
+def setup_reg_autograd_cost(D, k, n):
+    i_mtx = np.vstack(
+        (np.hstack((np.zeros((k, k)), -np.eye(k))),
+        np.hstack((np.eye(k), np.zeros((k, k)))))
+    )
+    W = distance_to_weights(D)
+    C = np.reshape(np.cos(D), (1, n**2))
+    def cost(pair):
+        """Weighted Frobenius norm cost function."""
+        Y = pair[0]
+        A = pair[1]
+        Re = np.linalg.norm(W*(np.reshape(C*A[0,:], (n, n)) - Y.T@Y))
+        Im = np.linalg.norm(W*(np.reshape(C*A[1,:], (n, n)) - Y.T@(i_mtx@Y)))
+        return 0.5*(Re**2 + Im**2)
+    return cost
+
+
 
 def setup_cost(D, Sreal, Simag):
     """Create the cost functions for pymanopt, using explicit derivatives.
