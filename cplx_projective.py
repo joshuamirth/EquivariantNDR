@@ -138,10 +138,12 @@ def cp_mds_reg(Y, D, lam=1.0, v=1):
     a_manifold = Oblique(2, num_points**2)
     manifold = Product((cp_manifold, a_manifold))
     solver = ConjugateGradient()
-    cost = setup_reg_autograd_cost(D, int(dim/2), num_points)
+    cost = setup_reg_autograd_cost(D, int(dim/2), num_points, lam=lam)
     problem = pymanopt.Problem(cost=cost, manifold=manifold)
-    Yopt, Aopt = solver.solve(problem)
-    return Yopt, Aopt
+    Yopt, Aopt = solver.solve(problem, x=(Y, A))
+    Areal = np.reshape(Aopt[0,:], (num_points, num_points))
+    Aimag = np.reshape(Aopt[1,:], (num_points, num_points))
+    return Yopt, Areal, Aimag
 
 
 ###############################################################################
@@ -210,6 +212,16 @@ def norm_rotations(Y):
     simag = simag / norms
     return sreal, simag
 
+def norm_compare(Y, Areal, Aimag):
+    """Compare |<y_i, y_j>| with a<y_i,y_j>."""
+    ip_real = Y.T@Y
+    ip_imag = -Y.T@times_i(Y)
+    ip_true = np.sqrt(ip_real**2 + ip_imag**2)
+    ip_computed = Areal*ip_real - Aimag*ip_imag
+    diff = np.linalg.norm(ip_true - ip_computed)
+    imag_err = Areal*ip_imag + Aimag*ip_real
+    return diff, imag_err
+    
 def acos_validate(M,tol=1e-6):
     """Replace values outside of domain of acos with +/- 1.
 
@@ -284,7 +296,7 @@ def setup_autograd_cost(D, Sreal, Simag, n):
         return 0.5*(np.linalg.norm(W*(Creal - Y.T@Y))**2 + np.linalg.norm(W*(Cimag - Y.T@(i_mtx@Y)))**2)
     return cost
 
-def setup_reg_autograd_cost(D, k, n):
+def setup_reg_autograd_cost(D, k, n, lam=1):
     i_mtx = np.vstack(
         (np.hstack((np.zeros((k, k)), -np.eye(k))),
         np.hstack((np.eye(k), np.zeros((k, k)))))
@@ -295,9 +307,12 @@ def setup_reg_autograd_cost(D, k, n):
         """Weighted Frobenius norm cost function."""
         Y = pair[0]
         A = pair[1]
+        YY = (Y.T@Y)**2 + (Y.T@(i_mtx@Y))**2 + 1/6  # linear ~ of sqrt()
         Re = np.linalg.norm(W*(np.reshape(C*A[0,:], (n, n)) - Y.T@Y))
         Im = np.linalg.norm(W*(np.reshape(C*A[1,:], (n, n)) - Y.T@(i_mtx@Y)))
-        return 0.5*(Re**2 + Im**2)
+        reg_Re = np.linalg.norm(YY*np.reshape(A[0,:], (n, n)) - Y.T@Y)
+        reg_Im = np.linalg.norm(YY*np.reshape(A[1,:], (n, n)) - Y.T@(i_mtx@Y))
+        return 0.5*(Re**2 + Im**2) + lam*(reg_Re**2 + reg_Im**2)
     return cost
 
 
