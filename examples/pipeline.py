@@ -6,8 +6,8 @@ import numpy.linalg as LA
 from ripser import ripser
 
 def prominent_cocycle(
-    D,
-    q = 2,
+    cocycles,
+    diagram,
     threshold_at_death = True
 ):
     """Primary cocycle from H_1 persistence for lens coordinate
@@ -21,13 +21,8 @@ def prominent_cocycle(
 
     Parameters
     ----------
-    D : ndarray (n*n)
-        Distance matrix. Must be square. Symmetry, non-negativity, and
-        triangle inequality are not enforced, but violations may lead to
-        unexpected results.
-    q : int, optional
-        Coefficient field in which to compute homology. Must be prime.
-        Default is 2.
+    cocycles : list of cocycles in dimension k (`PH['cocycles'][k]`)
+    diagram : persistence diagram in dimension k (`PH['dgms'][k]`)
     epsilon : Tolerance for covering radius. Default is 0.001. The
         persistent cocycle must die after 2*birth + epsilon to be valid.
     return_persistence : bool
@@ -83,9 +78,6 @@ def prominent_cocycle(
 
     """
     
-    PH = ripser(D,coeff=q,do_cocycles=True,maxdim=1,distance_matrix=True)
-    cocycles = PH['cocycles'][1]
-    diagram = PH['dgms'][1]
     persistence = diagram[:,1] - diagram[:,0]
     index = persistence.argsort()[-1] # Longest cycle is last.
     if index > len(cocycles):
@@ -495,12 +487,12 @@ class NoHomologyError(Exception):
 ###############################################################################
 
 # Its actually maxmin subsampling. l_next = argmax_X(min_L(d(x,l)))
-def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
+def maxmin_subsample_distance_matrix(D, num_landmarks, seed=[]):
     '''
     This function computes minmax subsampling using a square distance matrix.
 
-    :type X: numpy array
-    :param X: Square distance matrix
+    :type D: numpy array
+    :param D: Square distance matrix
 
     :type num_landmarks: int
     :param num_landmarks: Number of landmarks
@@ -508,7 +500,7 @@ def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
     :type seed: list
     :param list: Default []. List of indices to seed the sampling algorith.
     '''
-    num_points = len(X)
+    num_points = len(D)
 
     if not(seed):
         ind_L = [np.random.randint(0,num_points)] 
@@ -517,13 +509,13 @@ def minmax_subsample_distance_matrix(X, num_landmarks, seed=[]):
         num_landmarks += 1  # Why? I think this makes it return the wrong
                             # number of points if you apply a seed.
 
-    distance_to_L = np.min(X[ind_L, :], axis=0)
+    distance_to_L = np.min(D[ind_L, :], axis=0)
 
     for i in range(num_landmarks-1):
         ind_max = np.argmax(distance_to_L)
         ind_L.append(ind_max)
 
-        dist_temp = X[ind_max, :]
+        dist_temp = D[ind_max, :]
 
         distance_to_L = np.minimum(distance_to_L, dist_temp)
             

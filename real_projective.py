@@ -153,6 +153,15 @@ def pmds(Y, D, max_iter=20, verbosity=1):
 # Projective space geometry tools
 ###############################################################################
 
+def RPn_validate(Y):
+    """Check that Y is a valid element of RPn."""
+    valid = np.isrealobj(Y)
+    if Y.ndim > 1:
+        valid *= np.allclose(LA.norm(Y, axis=0), np.ones(Y.shape[1]))
+    else:
+        valid *= np.allclose(LA.norm(Y), np.ones(Y.shape))
+    return valid
+
 def projective_distance_matrix(Y):
     """Construct the (exact) distance matrix of data Y on RP^d."""
     S = np.sign(Y@Y.T)
