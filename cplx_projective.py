@@ -96,7 +96,7 @@ def cp_mds(Y, D, max_iter=20, v=1):
         Simag = Simag_new
     return Y
 
-def cp_mds_reg(Y, D, lam=1.0, v=1):
+def cp_mds_reg(Y, D, lam=1.0, v=1, maxiter=1000):
     """Version of MDS in which "signs" are also an optimization parameter.
 
     Rather than performing a full optimization and then resetting the
@@ -137,7 +137,7 @@ def cp_mds_reg(Y, D, lam=1.0, v=1):
     cp_manifold = Oblique(dim, num_points)
     a_manifold = Oblique(2, num_points**2)
     manifold = Product((cp_manifold, a_manifold))
-    solver = ConjugateGradient()
+    solver = ConjugateGradient(maxiter=maxiter, maxtime=float('inf'))
     cost = setup_reg_autograd_cost(D, int(dim/2), num_points, lam=lam)
     problem = pymanopt.Problem(cost=cost, manifold=manifold)
     Yopt, Aopt = solver.solve(problem, x=(Y, A))
