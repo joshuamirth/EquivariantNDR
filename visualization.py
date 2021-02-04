@@ -3,7 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
-
+def my3dscatterplot(X):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(X[0,:], X[1,:], X[2,:])
+    plt.show()
+    return None
+    
 """ Currently mostly copied from other places. """
 
 def imscatter(X, P, dim, zoom=1):
@@ -46,4 +52,3 @@ def plotPatches(P, zoom = 1):
     X[:, 0] = x.flatten()[0:N]
     X[:, 1] = y.flatten()[0:N]
     imscatter(X, P, d, zoom)
-
