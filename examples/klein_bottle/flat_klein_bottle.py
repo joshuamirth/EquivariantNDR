@@ -19,7 +19,6 @@ from ppca import ppca
 #-----------------------------------------------------------------------------#
 # Functions copied from Joe which give the geometry of the flat Klein
 # bottle.
-# TODO: are these wrong? Why do I not get the homology of the Klein bottle?
 
 def cls(x,y):
     '''
@@ -76,6 +75,8 @@ eta, birth, death = pipeline.prominent_cocycle(cocycles, diagram,
     threshold_at_death=False)
 
 # Get a partition of unity.
+# TODO: the parameters for the partition of unity radius is very
+# sensitive.
 part_func = pipeline.partition_unity(D, .115, sub_ind)
 proj_coords = pipeline.proj_coordinates(part_func, eta)
 
@@ -105,4 +106,3 @@ PH_mds = ripser(D_mds, distance_matrix=True, maxdim=2)
 # Save the data.
 #np.savez(filename, xy=xy, xy_sub = xy_sub, D=D, D_sub=D_sub, PH_sub=PH_sub,
 #    proj_coords=proj_coords)
-

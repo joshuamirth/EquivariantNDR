@@ -4,7 +4,7 @@ import numpy.linalg as LA
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
 import pymanopt
-from pymanopt.manifolds import Oblique 
+from pymanopt.manifolds import Oblique
 from pymanopt.solvers import ConjugateGradient
 
 ###############################################################################
@@ -19,7 +19,7 @@ def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
     such that nearby points have their ambient distance as defined by
     the original distance matrix, while far away points are given the
     shortest path distance in the graph.
-   
+
     Parameters
     ----------
     data : ndarray
@@ -164,8 +164,7 @@ def RPn_validate(Y):
 
 def projective_distance_matrix(Y):
     """Construct the (exact) distance matrix of data Y on RP^d."""
-    S = np.sign(Y@Y.T)
-    M = S*(Y@Y.T)
+    M = np.abs(Y@Y.T)
     acos_validate(M)
     D = np.arccos(M)    # Initial distance matrix
     return D
@@ -180,7 +179,7 @@ def acos_validate(M,tol=1e-6):
     tol : float
         Raises a warning if the values of `M` lie outside of
         [-1-tol,1+tol]. Default is `1e-6`.
-        
+
     Returns
     -------
     M : ndarray (m,n)
@@ -208,9 +207,10 @@ def acos_validate(M,tol=1e-6):
 
 def distance_to_weights(D):
     """Compute the weight matrix W from the distance matrix D."""
-    W_inv = (1 - np.cos(D)**2)     
-    W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1
-        - np.eye(D.shape[0],D.shape[1]))
+    #W_inv = (1 - np.cos(D)**2)
+    #W = np.sqrt((W_inv+np.eye(D.shape[0],D.shape[1]))**-1
+    #    - np.eye(D.shape[0],D.shape[1]))
+    W = np.sqrt((1 - np.cos(D)**2 + np.eye(D.shape[0]))**-1)
     return W
 
 def setup_cost(D,S,return_derivatives=False):
@@ -270,4 +270,3 @@ def vprint(msg, level, verbosity):
     """
     if verbosity >= level:
         print(msg)
-

@@ -8,6 +8,7 @@ from ripser import ripser
 def prominent_cocycle(
     cocycles,
     diagram,
+    order = 1,
     threshold_at_death = True
 ):
     """Primary cocycle from H_1 persistence for lens coordinate
@@ -23,10 +24,9 @@ def prominent_cocycle(
     ----------
     cocycles : list of cocycles in dimension k (`PH['cocycles'][k]`)
     diagram : persistence diagram in dimension k (`PH['dgms'][k]`)
-    epsilon : Tolerance for covering radius. Default is 0.001. The
-        persistent cocycle must die after 2*birth + epsilon to be valid.
-    return_persistence : bool
-        Set true to return the ripser output.
+    order: int, optional
+        Which cocycle to return. Default is the first (most prominent)
+        cocycle, but may be set to higher values.
     threshold_at_death : bool, optional
         If true, remove edges from the cocycle which do not exist before
         the death value. In principle this is unnecessary because the
@@ -39,16 +39,11 @@ def prominent_cocycle(
     eta : ndarray (?)
         Representative of the most persistent H_1 cocycle in the
         Vietoris–Rips persistent homology of D.
-    valid_class : bool
-        Whether the cohomology class if persistent enough to produce a
-        valid classifying map. If false the data may lack any H_1
-        cocycles or a different coefficient field may be required.
-    cover_radius : float
-        Birth time of valid cocycle + epsilon.
-    persistence : dict, optional
-        Full output from Ripser. Only returned if `return_persistence`
-        is set.
-        
+    birth : float
+        Time of birth for cocycle.
+    death : float
+        Time of death for cocycle.
+
     Examples
     --------
     The simple "house" simplicial complex has a cocycle.
@@ -69,17 +64,11 @@ def prominent_cocycle(
     ------
     NoHomologyError
         If there are no persistent H_1 cocycles at all.
-    
-    TODO
-    ----
-    * A better version of this function would return _all_ valid cocycles,
-    allowing a user to choose which one to create map from.
-    * Sort out how to return data more coherently.
 
     """
-    
+
     persistence = diagram[:,1] - diagram[:,0]
-    index = persistence.argsort()[-1] # Longest cycle is last.
+    index = persistence.argsort()[-1*order] # Longest cycle is last.
     if index > len(cocycles):
         raise NoHomologyError('No PH_1 classes found. Either there is no '\
             'persistent homology in dimension 1 when computed with '\
@@ -185,7 +174,7 @@ def partition_unity(D,radius,landmarks,conical=False):
 
 def proj_coordinates(partition_function, cocycle):
     """Coordinates of data matrix in lens space.
-    
+
     Parameters
     ----------
     partition_function : ndarray (d, N)
@@ -230,7 +219,7 @@ def lens_coordinates(
     p
 ):
     """Coordinates of data matrix in lens space.
-    
+
     Parameters
     ----------
     partition_function : ndarray (d*N)
@@ -248,7 +237,7 @@ def lens_coordinates(
         coefficient field in which the cocycle takes values. (So if
         homology was computed with :math:`\mathbb{Z}_3` coefficients,
         need to set `p = 3`.)
-        
+
     Returns
     -------
     X : ndarray (n*N)
@@ -267,12 +256,12 @@ def lens_coordinates(
     array([[ 0.57735027+0.j, 0.57735027+0.j, -0.+0.j, 0.57735027+0.j, 0.70710678+0.j],
            [ 0.57735027+0.j, 0.57735027+0.j, 0.57735027+0.j, 0.+0.j,  0.+0.j],
            [ 0.+0.j, 0.57735027+0.j, 0.57735027+0.j, 0.57735027+0.j, 0.+0.j],
-           [ 0.57735027+0.j, 0.+0.j, 0.57735027+0.j, 0.57735027+0.j, 0.70710678+0.j]])   
+           [ 0.57735027+0.j, 0.+0.j, 0.57735027+0.j, 0.57735027+0.j, 0.70710678+0.j]])
 
     References
     ----------
     .. [1] Ripser.py API documentation, https://ripser.scikit-tda.org/
-    
+
     """
 
     d = partition_function.shape[0] # number of landmarks.
@@ -305,7 +294,7 @@ def acos_validate(M,tol=1e-6):
     tol : float
         Raises a warning if the values of `M` lie outside of
         [-1-tol,1+tol]. Default is `1e-6`.
-        
+
     Returns
     -------
     M : ndarray (m,n)
@@ -333,7 +322,7 @@ def rotate_to_pole(v):
     \|v\|e_n` where :math:`e_n = [0,...,0,1]^T`. Handles both real and
     complex vectors. If the input vector is real, the output matrix is
     orthogonal, while if the input is complex, the output will be a unitary
-    matrix. 
+    matrix.
 
     Parameters
     ----------
@@ -428,7 +417,7 @@ def lpca(X,dim,p=2,tol=-1):
         [0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j]])
     >>> v
         [0.0]
-    
+
     Adding a small amount of wiggle in the last component produces the
     same projection, but with some variance lost.
     >>> X[3,3] = 0.1
@@ -544,7 +533,7 @@ def maxmin_subsample_distance_matrix(D, num_landmarks, seed=[]):
     num_points = len(D)
 
     if not(seed):
-        ind_L = [np.random.randint(0,num_points)] 
+        ind_L = [np.random.randint(0,num_points)]
     else:
         ind_L = seed
         num_landmarks += 1  # Why? I think this makes it return the wrong
@@ -559,7 +548,7 @@ def maxmin_subsample_distance_matrix(D, num_landmarks, seed=[]):
         dist_temp = D[ind_max, :]
 
         distance_to_L = np.minimum(distance_to_L, dist_temp)
-            
+
     return {'indices':ind_L, 'distance_to_L':distance_to_L}
 
 def minmax_subsample_point_cloud(X, num_landmarks, distance):
@@ -576,17 +565,16 @@ def minmax_subsample_point_cloud(X, num_landmarks, distance):
     :param  distance: Distance function. Must be able to compute distance between 2 point cloud with same dimension and different number of points in each point cloud.
     '''
     num_points = len(X)
-    ind_L = [np.random.randint(0,num_points)]  
+    ind_L = [np.random.randint(0,num_points)]
 
     distance_to_L = distance(X[ind_L,:], X)
 
     for i in range(num_landmarks-1):
         ind_max = np.argmax(distance_to_L)
         ind_L.append(ind_max)
-        
+
         dist_temp = distance(X[[ind_max],:], X)
 
         distance_to_L = np.minimum(distance_to_L, dist_temp)
 
     return {'indices':ind_L, 'distance_to_L':distance_to_L}
-
