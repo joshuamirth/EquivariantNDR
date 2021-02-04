@@ -119,7 +119,7 @@ def threshold_cocycle(cocycle,D,threshold):
     threshold_cocycle = np.delete(cocycle,bad_rows,0)
     return threshold_cocycle
 
-def partition_unity(D,radius,landmarks,conical=False):
+def partition_unity(D, radius, landmarks, bump_type='quadratic'):
     """Partition of unity subordinate to open ball cover.
 
     Parameters
@@ -131,6 +131,10 @@ def partition_unity(D,radius,landmarks,conical=False):
     landmarks : int list (l)
         List of indices to use as centers of balls. Elements must be a
         subset of `{0,...,N-1}` but may be repeated.
+    type : string, optional
+        Type of bump function to use for partition of unity. Default is
+        'triangular'. Other options include 'quadratic', 'logarithmic',
+        and 'gaussian'.
     conical : bool, optional
         If true, use a cone-shaped partition of unity in which points
         nearer the center of an open set are more heavily weighted. If
@@ -159,18 +163,33 @@ def partition_unity(D,radius,landmarks,conical=False):
            [0.        , 0.33333333, 0.33333333, 0.33333333, 0.        ],
            [0.33333333, 0.        , 0.33333333, 0.33333333, 0.5       ]])
 
+    References
+    ----------
+    See section 3 of "Multi-Scale Projective Coordinates". In particular,
+    this implementation has `epsilon_i = radius` for all `i`, and weights
+    of `lambda = radius^2`.
+
     """
 
     U = D[landmarks,:]
     S = U < radius
-    if conical:
-        S = S*(radius - U)
-    if not np.all(np.sum(S,axis=0)):
-        raise DivisionByZeroError('Open sets do not cover data when epsilon '\
-            '= %d.' %epsilon)
+    # Radius must be large enough that every point is in one open ball.
+    # Thus each column of `U` must contain at least one value less than
+    # radius.
+    cover_check = np.sum(S, axis=0)
+    if np.min(cover_check) < 1:
+        raise ValueError('Open sets do not cover data when epsilon '\
+            '= %d.' %radius)
+    if bump_type == 'quadratic':
+        # This is the default given in the paper.
+        S = S*(radius - U)**2
+    elif bump_type == 'triangular':
+        S = S*(radius**2 - radius*U)
     else:
-        S = S/np.sum(S,axis=0)
-        return S
+        raise NotImplementedError('This type of bump function not yet '\
+            'implemented. Use "quadratic" instead.')
+    S = S/np.sum(S, axis=0)
+    return S
 
 def proj_coordinates(partition_function, cocycle):
     """Coordinates of data matrix in lens space.
