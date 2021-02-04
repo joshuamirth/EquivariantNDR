@@ -75,7 +75,7 @@ eta, birth, death = pipeline.prominent_cocycle(cocycles, diagram,
     threshold_at_death=False)
 
 # Get a partition of unity.
-part_func = pipeline.partition_unity(D, .25, sub_ind, bump_type=='quadratic')
+part_func = pipeline.partition_unity(D, .25, sub_ind, bump_type='quadratic')
 proj_coords = pipeline.proj_coordinates(part_func, eta)
 D_pc = real_projective.projective_distance_matrix(proj_coords.T)
 D_geo = real_projective.geo_distance_matrix(D_pc, k=8)
