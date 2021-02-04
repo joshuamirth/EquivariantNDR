@@ -183,6 +183,47 @@ def partition_unity(D,radius,landmarks,conical=False):
         S = S/np.sum(S,axis=0)
         return S
 
+def proj_coordinates(partition_function, cocycle):
+    """Coordinates of data matrix in lens space.
+    
+    Parameters
+    ----------
+    partition_function : ndarray (d, N)
+        Function describing a partition of unity on the open cover given
+        by a landmark subset. Each of the `d` rows corresponds to the
+        function on the open ball around a landmark, where the `i`-th
+        entry is the value of that function on the `i`-th data point.
+    cocycle : ndarray (d, 3)
+        Cocycle representing choice of persistent H_1 class. The first
+        two columns give the simplices as pairs [i,j]. The third column
+        is the value in :math:`\mathbb{Z}_2` corresponding to each
+        simplex. See documentation for ripser [1]_.
+
+    Returns
+    -------
+    X : ndarray (d, N)
+        Coordinates of the `N` data points on :math:`\mathbb{R}P^n`.
+
+    """
+
+    d = partition_function.shape[0] # number of landmarks.
+    N = partition_function.shape[1] # number of data points.
+    used_columns = np.zeros(N)
+    X = np.zeros((d,N))
+    for i in range(d):
+        tmp_eta = np.zeros(d)
+        idx = np.where(cocycle[:,0]==i)  # what about other order?
+        tmp_eta[cocycle[idx,1]] = cocycle[idx,2]
+        neg_idx = np.where(cocycle[:,1]==i)
+        tmp_eta[cocycle[neg_idx,0]] = 2 - cocycle[neg_idx,2]
+        for k in range(N):
+            if partition_function[i,k] != 0 and not used_columns[k]:
+                used_columns[k] = 1
+                X[:,k] = np.sqrt(partition_function[:,k])*((-1)**(tmp_eta))
+        if sum(used_columns) == N:
+            break
+    return X
+
 def lens_coordinates(
     partition_function,
     cocycle,

@@ -8,6 +8,7 @@ N = 12  # Create N*N images
 amp = 1
 sd = .8 # Standard deviation needs to be large enough for overlap.
 K = 16  # Create K^2 total images.
+n_landmarks = 50
 
 # Generate the images:
 x = np.linspace(-1,1,N)
@@ -29,7 +30,26 @@ plt.show()
 
 # Compute the distance matrix and persistence.
 D = sp.spatial.distance.cdist(data, data, metric='euclidean')
+# TODO: improve this maxmin function.
+sub_ind = pipeline.maxmin_subsample_distance_matrix(D, n_landmarks)['indices']
+D_sub = D[sub_ind, :][:, sub_ind]
 PH = ripser(D, distance_matrix=True, maxdim=2)
 plot_diagrams(PH['dgms'])
 plt.show()
 # If the parameters are chosen well the PH should have a nice H^2 class.
+
+# Compute projective coordinates, using a prominent cocycle in dimension 2.
+cocycles = PH['cocycles'][2]
+diagram = PH['dgm'][2]
+part_func = pipeline.partition_unity(D, (death-birth)/2, sub_ind)
+eta, birth, death = pipeline.prominent_cocycle(cocycles, diagram,
+    threshold_at_death=False)
+# TODO: apply a Bockstein lift here.
+# TODO: use the harmonic cocycle.
+# TODO: implement complex projective coordinates (or pull from some existing
+# code).
+#proj_coors = 
+# Check persistence of projective coordinates.
+# Construct geodesic distance matrix of projective coordinates.
+# Apply PCA
+# Apply MDS.

@@ -160,7 +160,7 @@ def RPn_validate(Y):
         valid *= np.allclose(LA.norm(Y, axis=0), np.ones(Y.shape[1]))
     else:
         valid *= np.allclose(LA.norm(Y), np.ones(Y.shape))
-    return valid
+    return bool(valid)
 
 def projective_distance_matrix(Y):
     """Construct the (exact) distance matrix of data Y on RP^d."""
