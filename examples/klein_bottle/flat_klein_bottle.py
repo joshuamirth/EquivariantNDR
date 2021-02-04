@@ -75,17 +75,12 @@ eta, birth, death = pipeline.prominent_cocycle(cocycles, diagram,
     threshold_at_death=False)
 
 # Get a partition of unity.
-# TODO: the parameters for the partition of unity radius is very
-# sensitive.
-part_func = pipeline.partition_unity(D, .115, sub_ind)
+part_func = pipeline.partition_unity(D, .25, sub_ind, bump_type=='quadratic')
 proj_coords = pipeline.proj_coordinates(part_func, eta)
-
-print(real_projective.RPn_validate(proj_coords))
-
 D_pc = real_projective.projective_distance_matrix(proj_coords.T)
 D_geo = real_projective.geo_distance_matrix(D_pc, k=8)
 # Compute PH of landmarks of high-dimensional data.
-PH_pc = ripser(D_geo[sub_ind,:][:,sub_ind], distance_matrix=True, maxdim=2, coeff=2)
+PH_pc = ripser(D_geo, distance_matrix=True, maxdim=2, coeff=2)
 plot_diagrams(PH_pc['dgms'])
 plt.show()
 # Apply PPCA to reduce to dimension 2.
@@ -96,12 +91,11 @@ PH_ppca = ripser(D_ppca[sub_ind,:][:,sub_ind], distance_matrix=True, maxdim=2)
 plot_diagrams(PH_ppca['dgms'])
 plt.show()
 # Apply MDS to PCA output.
-X_mds = real_projective.pmds(X_ppca, D_geo)
+X_mds = real_projective.pmds(X_ppca, D_geo, max_iter=100)
 # Compute persistence of MDS output.
 D_mds = real_projective.projective_distance_matrix(X_mds)
 PH_mds = ripser(D_mds, distance_matrix=True, maxdim=2)
 # Plot MDS and PCA outputs.
-
 
 # Save the data.
 #np.savez(filename, xy=xy, xy_sub = xy_sub, D=D, D_sub=D_sub, PH_sub=PH_sub,

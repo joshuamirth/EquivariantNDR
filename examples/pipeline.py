@@ -220,7 +220,7 @@ def proj_coordinates(partition_function, cocycle):
     X = np.zeros((d,N))
     for i in range(d):
         tmp_eta = np.zeros(d)
-        idx = np.where(cocycle[:,0]==i)  # what about other order?
+        idx = np.where(cocycle[:,0]==i)
         tmp_eta[cocycle[idx,1]] = cocycle[idx,2]
         neg_idx = np.where(cocycle[:,1]==i)
         tmp_eta[cocycle[neg_idx,0]] = 2 - cocycle[neg_idx,2]
