@@ -70,10 +70,9 @@ def prominent_cocycle(
     persistence = diagram[:,1] - diagram[:,0]
     index = persistence.argsort()[-1*order] # Longest cycle is last.
     if index > len(cocycles):
-        raise NoHomologyError('No PH_1 classes found. Either there is no '\
-            'persistent homology in dimension 1 when computed with '\
-            'Z/%dZ coefficients or the distance matrix was improperly '\
-            'specified.' %q)
+        raise NoHomologyError('No cohomology classes found. Either there is '\
+            'no persistent homology in this dimension or the distance matrix '\
+            'was improperly specified.')
     eta = cocycles[index]
     birth = diagram[index,0]
     death = diagram[index,1]
