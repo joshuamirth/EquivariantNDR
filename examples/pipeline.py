@@ -70,9 +70,8 @@ def prominent_cocycle(
     persistence = diagram[:,1] - diagram[:,0]
     index = persistence.argsort()[-1*order] # Longest cycle is last.
     if index > len(cocycles):
-        raise NoHomologyError('No cohomology classes found. Either there is '\
-            'no persistent homology in this dimension or the distance matrix '\
-            'was improperly specified.')
+        raise NoHomologyError('No cohomology class found. Verify that there '\
+            'are at least %d cocycles in this dimension.' %order)
     eta = cocycles[index]
     birth = diagram[index,0]
     death = diagram[index,1]
@@ -200,11 +199,13 @@ def proj_coordinates(partition_function, cocycle):
         by a landmark subset. Each of the `d` rows corresponds to the
         function on the open ball around a landmark, where the `i`-th
         entry is the value of that function on the `i`-th data point.
-    cocycle : ndarray (d, 3)
+    cocycle : ndarray (d, 3) or (d, 2)
         Cocycle representing choice of persistent H_1 class. The first
         two columns give the simplices as pairs [i,j]. The third column
-        is the value in :math:`\mathbb{Z}_2` corresponding to each
-        simplex. See documentation for ripser [1]_.
+        is the value in :math:`\mathbb{Z}_p` corresponding to each
+        simplex. Since we always use the field with two elements, the last
+        column consists only of `1` and thus can be omitted. See documentation
+        for ripser [1]_.
 
     Returns
     -------
@@ -217,12 +218,17 @@ def proj_coordinates(partition_function, cocycle):
     N = partition_function.shape[1] # number of data points.
     used_columns = np.zeros(N)
     X = np.zeros((d,N))
+    p = cocycle.shape[1]
     for i in range(d):
         tmp_eta = np.zeros(d)
         idx = np.where(cocycle[:,0]==i)
-        tmp_eta[cocycle[idx,1]] = cocycle[idx,2]
         neg_idx = np.where(cocycle[:,1]==i)
-        tmp_eta[cocycle[neg_idx,0]] = 2 - cocycle[neg_idx,2]
+        if p == 3:
+            tmp_eta[cocycle[idx,1]] = cocycle[idx,2]
+            tmp_eta[cocycle[neg_idx,0]] = 2 - cocycle[neg_idx,2]
+        else:
+            tmp_eta[cocycle[idx,1]] = 1
+            tmp_eta[cocycle[neg_idx,0]] = 1
         for k in range(N):
             if partition_function[i,k] != 0 and not used_columns[k]:
                 used_columns[k] = 1
