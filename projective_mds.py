@@ -1,7 +1,9 @@
 """ Dim reduction on RPn using an MDS-type method. """
-import matlab.engine    # for LRCM MIN.
-import autograd.numpy as np
-import autograd.numpy.linalg as LA
+# import matlab.engine    # for LRCM MIN.
+#import autograd.numpy as np
+#import autograd.numpy.linalg as LA
+import numpy as np
+import numpy.linalg as LA
 import scipy.io as io
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
@@ -14,6 +16,9 @@ from pymanopt.solvers import *
 import os
 import random 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# TODO: decide where best to place these utility functions.
+from pipeline import acos_validate
 
 # dreimac does not install properly on my system.
 try:
@@ -215,15 +220,15 @@ def cholesky_rep(X):
     C = np.tril(X@Q)    # The matrix is lower-triangular, but apply tril
     return C            # to handle floating-point errors.
 
-def geo_distance_matrix(D,epsilon=0.4,k=-1):
-    """Construct a geodesic distance matrix from data in RP^n.
+def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
+    """Approximate a geodesic distance matrix.
 
-    Given a point cloud of data in RP^n, uses either an epsilon
-    neighborhood or a k-NN algorithm to find nearby points, then builds
-    a distance matrix such that nearby points have their ambient
-    distance, while far away points are given the shortest path distance
-    in the graph.
-    
+    Given a distance matrix uses either an epsilon neighborhood or a
+    k-NN algorithm to find nearby points, then builds a distance matrix
+    such that nearby points have their ambient distance as defined by
+    the original distance matrix, while far away points are given the
+    shortest path distance in the graph.
+   
     Parameters
     ----------
     data : ndarray
@@ -280,13 +285,17 @@ def graph_distance_matrix(data,epsilon=0.4,k=-1):
     
     Parameters
     ----------
-    data : ndarray
-        Data as an n*2 matrix, assumed to lie on RP^n (i.e. S^n).
+    D : ndarray (n*n)
+        Distance matrix to convert to an approximation of the geodesic
+        distance matrix.
     epsilon : float, optional
         Radius of neighborhood when constructing graph. Default is ~pi/8.
     k : int, optional
         Number of nearest neighbors in k-NN graph. Default is -1 (i.e.
         use epsilon neighborhoods).
+    normalize : bool, optional 
+        Normalize the output distance matrix `Dhat` so that the maximum
+        distance is the same as in the original. Default is True.
 
     Returns
     -------
@@ -305,9 +314,6 @@ def graph_distance_matrix(data,epsilon=0.4,k=-1):
 
     """
 
-    M = np.abs(data@data.T)
-    acos_validate(M)
-    D = np.arccos(M)    # Initial distance matrix
     # Use kNN. Sort twice to get nearest neighbour list.
     if k > 0:
         D_sort = np.argsort(np.argsort(D))
@@ -459,14 +465,6 @@ def plot_RP2(X,axes=None,pullback=True,compare=False,Z=[]):
 # Miscellaneous
 ###############################################################################
 
-def acos_validate(M):
-    """Replace values in M outside of domain of acos with +/- 1."""
-    big_vals = M >= 1.0
-    M[big_vals] = 1.0
-    small_vals = M <= -1.0
-    M[small_vals] = -1.0
-    return M
-
 def distance_to_weights(D):
     """Compute the weight matrix W from the distance matrix D."""
     W_inv = (1 - np.cos(D)**2)     
@@ -526,7 +524,6 @@ def setup_cost(D,S,return_derivatives=False):
 
     W = distance_to_weights(D)
     C = S*np.cos(D)
-#   @pymanopt.function.Autograd
     def F(Y):
         """Weighted Frobenius norm cost function."""
         return 0.5*np.linalg.norm(W*(C-Y.T@Y))**2
@@ -536,10 +533,7 @@ def setup_cost(D,S,return_derivatives=False):
     def ddF(Y,H):
         """Second derivative (Hessian) of weighted Frobenius norm cost."""
         return 2*((W**2*(Y.T@Y-C))@H + (W**2*(Y@H.T + H@Y.T))@Y)
-    if return_derivatives:
-        return F, dF, ddF
-    else:
-        return F
+    return F, dF, ddF
 
 ###############################################################################
 # Old Stuff
