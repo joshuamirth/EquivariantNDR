@@ -1,4 +1,11 @@
-"""Methods for doing MDS with the sine metric on projective space."""
+"""Methods for doing MDS with the sine metric on projective space.
+
+Throughout, we model `k` points on RP^n as `k` column vectors with unit norm,
+or collectively an (n+1)*k matrix with unit norm columns. This corresponds to
+the "Oblique" manifold defined in pymanopt.
+
+"""
+
 import autograd.numpy as np
 import pymanopt
 
@@ -6,24 +13,29 @@ def sine_distance_matrix(X):
     D = np.sqrt(1 - (X.T@X)**2)
     return D
 
-def rp_mds(X, D):
+def rp_mds(D, dim, X=None):
     """MDS via gradient descent with sine metric.
 
     Parameters
     ----------
-    X : ndarray (n, k)
-        Initial value for gradient descent. `n` points in dimension `k`.
     D : ndarray (n, n)
         Goal distance matrix.
+    X : ndarray (n, dim), optional
+        Initial value for gradient descent. `n` points in dimension `dim`.
     """
-    n = X.shape[0]
-    k = X.shape[1]
-    manifold = pymanopt.manifolds.Oblique(k, n)
+    n = D.shape[0]
+    max_d = np.max(D)
+    if max_d > 1:
+        print('WARNING: maximum value in distance matrix exceeds diameter of '\
+            'projective space. Max distance = $2.4f.' %max_d)
+    manifold = pymanopt.manifolds.Oblique(dim, n)
     solver = pymanopt.solvers.ConjugateGradient()
     cost = setup_cost(D)
     problem = pymanopt.Problem(manifold=manifold, cost=cost)
-    X_out = solver.solve(problem, x=X)
-    X_out = X_out.T
+    if X:
+        X_out = solver.solve(problem, x=X)
+    else:
+        X_out = solver.solve(problem)
     return X_out
 
 def setup_cost(D):
