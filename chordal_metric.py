@@ -14,6 +14,7 @@ def RPn_chordal_distance_matrix(X):
     return D
 
 def CPn_chordal_distance_matrix(X):
+    # TODO: fix to use actual complex inner product.
     n = int(X.shape[0]/2)
     cj_mtx = np.block([
         [np.eye(n), np.zeros((n, n))],
@@ -56,7 +57,7 @@ def main_mds(D, dim=3, X=None, space='real'):
     if space == 'real':
         cost = setup_cost(D)
     elif space == 'complex':
-        cost = setup_CPn_cost(D)
+        cost = setup_CPn_cost(D, int(dim/2))
     problem = pymanopt.Problem(manifold=manifold, cost=cost)
     if X is None:
         X_out = solver.solve(problem)
@@ -81,9 +82,8 @@ def setup_cost(D):
 # Complex Projective Version #
 ################################################################################
 
-def setup_CPn_cost(D):
+def setup_CPn_cost(D, n):
     """Cost using chordal metric on CPn."""
-    n = int(D.shape[0]/2)
     cj_mtx = np.block([
         [np.eye(n), np.zeros((n, n))],
         [np.zeros((n, n)), -np.eye(n)]
@@ -91,10 +91,11 @@ def setup_CPn_cost(D):
     A = np.ones(D.shape)
     C = A - D
     def cost(X):
+        # TODO: fix this to use the actual complex inner product.
         F = np.linalg.norm(((cj_mtx@X).T @ X) * (X.T @ (cj_mtx@X)) - C)**2
         return F
     return cost
 
-def cp_mds(X, dim=4, X=None):
-    X_out = main_mds(x, dim=dim, X=X, space='complex')
+def cp_mds(D, dim=4, X=None):
+    X_out = main_mds(D, dim=dim, X=X, space='complex')
     return X_out
