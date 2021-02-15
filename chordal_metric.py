@@ -10,18 +10,31 @@ import autograd.numpy as np
 import pymanopt
 
 def RPn_chordal_distance_matrix(X):
-    D = np.sqrt(1 - (X.T@X)**2)
+    D = np.sqrt(sqrt_validate(1 - (X.T@X)**2))
     return D
 
 def CPn_chordal_distance_matrix(X):
     # TODO: fix to use actual complex inner product.
     n = int(X.shape[0]/2)
-    cj_mtx = np.block([
-        [np.eye(n), np.zeros((n, n))],
-        [np.zeros((n, n)), -np.eye(n)]
+    i_mtx = np.block([
+        [np.zeros((n, n)), -np.eye(n)],
+        [np.eye(n), np.zeros((n, n))]
         ])
-    D = np.sqrt(1 - (((cj_mtx@X).T @ X) * (X.T @ (cj_mtx@X))))
+    D = np.sqrt(sqrt_validate(1 - ((X.T @ X)**2 + (X.T @ (i_mtx@X))**2)))
     return D
+
+def sqrt_validate(X):
+    """Replace matrix with entries > 0."""
+    tol = 1e-9
+    x_min = np.min(X)
+    if x_min > 0:
+        return X
+    elif x_min < -tol:
+        print('WARNING: matrix contains nontrivial negative values.')
+    bad_idx = X < 0
+    X[bad_idx] = 0
+    return X
+
 
 def rp_mds(D, dim=3, X=None):
     """Wrapper function."""
@@ -84,15 +97,14 @@ def setup_cost(D):
 
 def setup_CPn_cost(D, n):
     """Cost using chordal metric on CPn."""
-    cj_mtx = np.block([
-        [np.eye(n), np.zeros((n, n))],
-        [np.zeros((n, n)), -np.eye(n)]
+    i_mtx = np.block([
+        [np.zeros((n, n)), -np.eye(n)],
+        [np.eye(n), np.zeros((n, n))]
         ])
     A = np.ones(D.shape)
     C = A - D
     def cost(X):
-        # TODO: fix this to use the actual complex inner product.
-        F = np.linalg.norm(((cj_mtx@X).T @ X) * (X.T @ (cj_mtx@X)) - C)**2
+        F = np.linalg.norm((X.T @ X)**2 + (X.T @ (i_mtx@X))**2 - C)**2
         return F
     return cost
 
