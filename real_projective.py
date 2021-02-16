@@ -62,6 +62,7 @@ def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
             'indicating that the graph is not connected. Try a larger value ' +
             'of epsilon or k.')
     Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
+    np.fill_diagonal(Dhat, 0)
     return Dhat
 
 def pmds(Y, D, max_iter=20, verbosity=1):
@@ -167,6 +168,7 @@ def projective_distance_matrix(Y):
     M = np.abs(Y@Y.T)
     acos_validate(M)
     D = np.arccos(M)    # Initial distance matrix
+    np.fill_diagonal(D, 0)
     return D
 
 def acos_validate(M,tol=1e-6):

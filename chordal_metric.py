@@ -11,6 +11,7 @@ import pymanopt
 
 def RPn_chordal_distance_matrix(X):
     D = np.sqrt(sqrt_validate(1 - (X.T@X)**2))
+    np.fill_diagonal(D, 0)
     return D
 
 def CPn_chordal_distance_matrix(X):
@@ -21,6 +22,7 @@ def CPn_chordal_distance_matrix(X):
         [np.eye(n), np.zeros((n, n))]
         ])
     D = np.sqrt(sqrt_validate(1 - ((X.T @ X)**2 + (X.T @ (i_mtx@X))**2)))
+    np.fill_diagonal(D, 0)
     return D
 
 def sqrt_validate(X):

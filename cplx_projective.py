@@ -108,7 +108,7 @@ def cp_mds_reg(Y, D, lam=1.0, v=1, maxiter=1000):
     manifold, consisting of `k*n` matrices with unit-norm columns. Since
     we are working on a sphere in complex space we require `k` to be
     even. The first `k/2` entries of each column are the real components
-    and the last `k/2` entries are the imaginary parts. 
+    and the last `k/2` entries are the imaginary parts.
 
     Parameters
     ----------
@@ -183,7 +183,7 @@ def complexify(Y):
     n = int(Y.shape[0]/2)
     Ycplx = Y[0:n] + 1j*Y[n:2*n]
     return Ycplx
-    
+
 def times_i(Y):
     """Multiply the real representation of a complex vector by i."""
     n = int(Y.shape[0]/2)
@@ -200,6 +200,7 @@ def CPn_distance_matrix(Y):
     M = np.sqrt(M)
     acos_validate(M)
     D = np.arccos(M)
+    np.fill_diagonal(D, 0)
     return D
 
 def norm_rotations(Y):
@@ -221,7 +222,7 @@ def norm_compare(Y, Areal, Aimag):
     diff = np.linalg.norm(ip_true - ip_computed)
     imag_err = Areal*ip_imag + Aimag*ip_real
     return diff, imag_err
-    
+
 def acos_validate(M,tol=1e-6):
     """Replace values outside of domain of acos with +/- 1.
 
@@ -232,7 +233,7 @@ def acos_validate(M,tol=1e-6):
     tol : float
         Raises a warning if the values of `M` lie outside of
         [-1-tol,1+tol]. Default is `1e-6`.
-        
+
     Returns
     -------
     M : ndarray (m,n)
@@ -392,9 +393,9 @@ def hopf(Y):
     -------
     S : ndarray (3, k)
         Array of `k` points in S^2 < R^3.
- 
+
     """
-   
+
     if Y.shape[0] != 4:
         raise ValueError('Points must be in R^4 to apply Hopf map!.')
     S = np.vstack((
@@ -402,4 +403,3 @@ def hopf(Y):
         [-2*Y[0,:]*Y[3,:] + 2*Y[1,:]*Y[2,:]],
         [Y[0,:]**2 + Y[2,:]**2 - Y[1,:]**2 - Y[3,:]**2]))
     return S
-
