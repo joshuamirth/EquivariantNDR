@@ -290,11 +290,13 @@ def setup_autograd_cost(D, Sreal, Simag, n):
         np.hstack((np.eye(n), np.zeros((n, n)))))
     )
     W = distance_to_weights(D)
-    Creal = Sreal*np.cos(D)
-    Cimag = Simag*np.cos(D)
-    def cost(Y):
+    C = np.cos(D)**2
+    # Creal = Sreal*np.cos(D)
+    # Cimag = Simag*np.cos(D)
+    def cost(X):
         """Weighted Frobenius norm cost function."""
-        return 0.5*(np.linalg.norm(W*(Creal - Y.T@Y))**2 + np.linalg.norm(W*(Cimag - Y.T@(i_mtx@Y)))**2)
+        F = 0.5*np.linalg.norm((X.T @ X)**2 + (X.T @ (i_mtx@X))**2 - C)**2
+        return F
     return cost
 
 def setup_reg_autograd_cost(D, k, n, lam=1):

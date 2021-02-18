@@ -1,6 +1,6 @@
 """ Dim reduction on RPn using an MDS-type method. """
-import numpy as np
-import numpy.linalg as LA
+import autograd.numpy as np
+import autograd.numpy.linalg as LA
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
 import pymanopt
@@ -112,10 +112,12 @@ def pmds(Y, D, max_iter=20, verbosity=1):
     manifold = Oblique(rank, num_points) # Short, wide matrices.
     solver = ConjugateGradient()
     for i in range(0, max_iter):
-        cost, egrad, ehess = setup_cost(D, S)
+        # cost, egrad, ehess = setup_cost(D, S)
+        cost = setup_square_cost(D)
         start_cost_list.append(cost(Y.T))
-        problem = pymanopt.Problem(manifold, cost, egrad=egrad, ehess=ehess,
-            verbosity=verbosity)
+        # problem = pymanopt.Problem(manifold, cost, egrad=egrad, ehess=ehess,
+            # verbosity=verbosity)
+        problem = pymanopt.Problem(manifold, cost, verbosity=verbosity)
         Y_new = solver.solve(problem, x=Y.T)
         Y_new = Y_new.T     # Y should be tall-skinny
         end_cost_list.append(cost(Y_new.T))
@@ -259,6 +261,52 @@ def setup_cost(D,S,return_derivatives=False):
         """Second derivative (Hessian) of weighted Frobenius norm cost."""
         return 2*((W**2*(Y.T@Y-C))@H + (W**2*(Y@H.T + H@Y.T))@Y)
     return cost, grad, hess
+
+def setup_square_cost(D,return_derivatives=False):
+    """Create the cost functions for pymanopt, using explicit derivatives.
+
+    Pymanopt performs optimization routines on manifolds, which require
+    knowing the gradient and possibly hessian of the objective function
+    (on the appropriate Riemannian manifold). For the weighted Frobenius
+    norm objective function, there are explicit formulas defined here.
+    The weighted Frobenius norm is given by
+        F(Y) = ||W*S*cos(D) - W*Y.T@Y||^2
+    where W is a weight matrix. Note that here Y is short and wide, so
+    each column is a data point (a vector with norm one). The gradient
+    and hessian of F are computed in Grubisic and Pietersz.
+
+    Parameters
+    ----------
+    D : ndarray (n, n)
+        Matrix of target distances.
+    S : ndarray (n, n)
+        Matrix of signs.
+
+    Returns
+    -------
+    cost : function
+        Weighted Frobenius norm cost function.
+    grad : function
+        Gradient of cost function.
+    hess : function
+        Hessian of cost function.
+
+    """
+
+    W = distance_to_weights(D)
+    C = np.cos(D)**2
+#   @pymanopt.function.Autograd
+    def cost(Y):
+        """Weighted Frobenius norm cost function."""
+        return 0.5*np.linalg.norm(W*(C - (Y.T@Y)**2))**2
+    return cost
+    # def grad(Y):
+        # """Derivative of weighted Frobenius norm cost."""
+        # return 2*Y@(W**2*(Y.T@Y-C))
+    # def hess(Y,H):
+        # """Second derivative (Hessian) of weighted Frobenius norm cost."""
+        # return 2*((W**2*(Y.T@Y-C))@H + (W**2*(Y@H.T + H@Y.T))@Y)
+    # return cost, grad, hess
 
 ###############################################################################
 # Miscellanea
