@@ -4,22 +4,11 @@ high-dimensional data on RP^5."""
 # A whole bunch of import statements.
 # %% codecell
 import autograd.numpy as np
-import scipy as sp
 import matplotlib.pyplot as plt
 from ripser import ripser
 from persim import plot_diagrams
-import real_projective
-import cplx_projective
-from examples import pipeline   # Note: to make this work, install
-            # package in editable mode, `pip install -e .` in root directory.
-from scipy.spatial.distance import pdist, squareform    # For some reason I have to
-                                            # import this, instead of just
-                                            # running it?
-from numpy.random import default_rng
-from ppca import ppca
-import pymanopt
+import geodesic_metric
 import chordal_metric
-from importlib import reload
 
 # Import the data and list what is in it.
 # %% codecell
@@ -70,12 +59,7 @@ plt.show()
 # Now perform the same experiment using the squared distances cost function.
 
 # %%codecell
-# (This currently assumes we're in the "square" branch and it's a very hacky
-# implementation.)
-X_square = real_projective.pmds(X_ppca, D_geo, verbosity=2)
-
-# %% codecell
-X_square = X_square.T
+X_square = geodesic_metric.rp_mds(D_geo, X=X_ppca.T)
 
 # %% codecell
 fig = plt.figure()
@@ -166,13 +150,10 @@ plt.show()
 
 # As a final point of comparison, let's test the squared cost with a random initial condition.
 # %% codecell
-rng = np.random.default_rng(57)
+rng = np.random.default_rng()
 X_rand = rng.standard_normal((3, 500))
 X_rand = X_rand/np.linalg.norm(X_rand, axis=0)
-X_mds_r = real_projective.pmds(X_rand.T, D_geo)
-
-# %% codecell
-X_mds_r = X_mds_r.T
+X_mds_r = geodesic_metric.rp_mds(D, X=X_rand)
 
 # %% codecell
 fig = plt.figure()
@@ -182,13 +163,11 @@ ax.scatter(-X_mds_r[0,:], -X_mds_r[1,:], -X_mds_r[2,:])
 ax.view_init(30, -50) #elev, azim pair. Default 30, -60.
 ax.set_title('Squared Cost with Random IC')
 plt.show()
-# So not perfect, but it is a pretty good result for a completely random guess.
+# These are now not very good. Were they better before?
 
 # %% codecell
 # OLD: deeper analysis of the chordal metric result.
-# # %% markdown
 # # So I think this might have more to do with the chordal metric looking a little odd than it does with the optimization.
-# # %% markdown
 # # How different are the three results?
 # # %% codecell
 # print(np.linalg.norm(D_out - D_out_2))
@@ -198,7 +177,6 @@ plt.show()
 # print(np.linalg.norm(D_out - D_goal)/np.linalg.norm(D_goal))
 # print(np.linalg.norm(D_mds - D_geo)/np.linalg.norm(D_geo))
 # print(np.linalg.norm(D_geo - D_ppca)/np.linalg.norm(D_geo))
-# # %% markdown
 # # What does the persistence of the geodesic metric on the output points look like?
 # # %% codecell
 # D_out_geo = real_projective.projective_distance_matrix(X_out.T)
@@ -208,9 +186,7 @@ plt.show()
 # plt.show()
 # # %% codecell
 # print(np.linalg.norm(D_out_geo - D_geo)/np.linalg.norm(D_geo))
-# # %% markdown
 # # I don't really understand how this can be this...okay?
-# # %% markdown
 # # ## Chordal the Whole Way
 # # %% codecell
 # D_c = chordal_metric.RPn_chordal_distance_matrix(B.T)
