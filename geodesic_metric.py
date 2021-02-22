@@ -45,7 +45,7 @@ def main_mds(D, dim=3, X=None, space='real'):
     max_d = np.max(D)
     if max_d > np.pi/2:
         print('WARNING: maximum value in distance matrix exceeds diameter of '\
-            'projective space. Max value in distance matrix = $2.4f.' %max_d)
+            'projective space. Max value in distance matrix = %2.4f.' %max_d)
     manifold = pymanopt.manifolds.Oblique(dim, n)
     solver = pymanopt.solvers.ConjugateGradient()
     if space == 'real':
