@@ -5,8 +5,7 @@ import scipy as sp
 import matplotlib.pyplot as plt
 from ripser import ripser
 from persim import plot_diagrams
-import real_projective
-import cplx_projective
+import geodesic_metric
 from examples import pipeline   # Note: to make this work, install
             # package in editable mode, `pip install -e .` in root directory.
 from scipy.spatial.distance import pdist    # For some reason I have to
@@ -18,6 +17,7 @@ from ppca import ppca
 #-----------------------------------------------------------------------------#
 # Functions copied from Joe which create the image patches.
 
+# %% codecell
 def makeDCT():
     '''
     Constructs the DCT basis for the Klein bottle image patch model
@@ -56,6 +56,7 @@ def makeDCT():
     v4 = v4/np.sqrt((v4.dot(D).dot(v4.T)))
     return v1,v2,v3,v4
 
+# %% codecell
 def Klein(numa,numt):
     """
     Builds the Klein bottle image patch model with `numa` directional angles and
@@ -78,36 +79,40 @@ def Klein(numa,numt):
 
 #-----------------------------------------------------------------------------#
 
+# %% codecell
 # Get DCT basis vectors.
 v1,v2,v3,v4 = makeDCT()
-
 # Set up parameters.
 numalphas = 50
 numthetas = 2*numalphas
 n_landmarks = 300
-
 L, alphas,thetas = Klein(numalphas,numthetas)
 L = np.squeeze(L)
 D = sp.spatial.distance.pdist(L,'euclidean')
 D = sp.spatial.distance.squareform(D)
 print(D.shape)
 
+# %% codecell
 # Downsample the dataset to remove the points that are on top of other points.
 big_sub_ind = pipeline.maxmin_subsample_distance_matrix(D, 5*n_landmarks)['indices']
 D =  D[big_sub_ind, :][:, big_sub_ind]
 L = L[big_sub_ind,:]
-
 # Choose a landmark subset.
 sub_ind = pipeline.maxmin_subsample_distance_matrix(D, n_landmarks)['indices']
 D_sub =  D[sub_ind, :][:, sub_ind]
 L_sub = L[sub_ind,:]
 
+# %% codecell
 print('Computing persistence of the landmarks.')
 PH_sub = ripser(D_sub, coeff=2, do_cocycles=True, maxdim=1,
     distance_matrix=True)
 plot_diagrams(PH_sub['dgms'])
+plt.title('Persistence of Data')
 plt.show()
+# Note that this should show two prominent cocycles in H^1 with F2 coefficients
+# and only one with F3.
 
+# %% codecell
 # Get a prominent cocycle in dimension one.
 print('Computing projective coordinates in dimension %d.' %len(sub_ind))
 cocycles = PH_sub['cocycles'][1]
@@ -117,28 +122,45 @@ eta, birth, death = pipeline.prominent_cocycle(cocycles, diagram,
 eta2, birth2, death2 = pipeline.prominent_cocycle(cocycles, diagram,
     threshold_at_death=False, order=2)
 
+# %% codecell
 # Get a partition of unity.
 part_func = pipeline.partition_unity(D, .45, sub_ind, bump_type='quadratic')
 proj_coords = pipeline.proj_coordinates(part_func, eta)
 D_pc = real_projective.projective_distance_matrix(proj_coords.T)
 D_geo = real_projective.geo_distance_matrix(D_pc, k=8)
+
+# %% codecell
 # Compute PH of landmarks of high-dimensional data.
 PH_pc = ripser(D_geo, distance_matrix=True, maxdim=1, coeff=2)
 plot_diagrams(PH_pc['dgms'])
+plt.title('Persistence of Projective Coordinates')
 plt.show()
+# There are still two large H^1 cocyles, though they are hard to distinguish.
+
+# %% codecell
 # Apply PPCA to reduce to dimension 2.
 X_ppca = ppca(proj_coords.T, 2)['X']
 # Compute persistence of PCA output.
 D_ppca = real_projective.projective_distance_matrix(X_ppca)
-PH_ppca = ripser(D_ppca[sub_ind,:][:,sub_ind], distance_matrix=True, maxdim=1)
+PH_ppca = ripser(D_ppca[sub_ind,:][:,sub_ind], distance_matrix=True, maxdim=1, coeff=3)
 plot_diagrams(PH_ppca['dgms'])
+plt.title('Persistence of PPCA Output')
 plt.show()
+# These are goofy. The major H^1 class seems to become slightly less persistent
+# when coefficients are in F3. But it doesn't disappear...
+
+# %% codecell
 # Apply MDS to PCA output.
-X_mds = real_projective.pmds(X_ppca, D_geo, max_iter=100)
+X_mds = geodesic_metric.rp_mds(D_geo, X=X_ppca.T)
+#X_mds = real_projective.pmds(X_ppca, D_geo, max_iter=100)
+
+# %% codecell
 # Compute persistence of MDS output.
-D_mds = real_projective.projective_distance_matrix(X_mds)
-PH_mds = ripser(D_mds, distance_matrix=True, maxdim=1)
-# Plot MDS and PCA outputs.
+D_mds = geodesic_metric.RPn_distance_matrix(X_mds)
+PH_mds = ripser(D_mds, distance_matrix=True, maxdim=1, coeff=2)
+plot_diagrams(PH_mds['dgms'])
+plt.title('Peristence of MDS Output')
+plt.show()
 
 # Save the data.
 #np.savez(filename, xy=xy, xy_sub = xy_sub, D=D, D_sub=D_sub, PH_sub=PH_sub,
