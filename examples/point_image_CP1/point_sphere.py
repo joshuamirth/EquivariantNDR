@@ -83,7 +83,7 @@ D_geo = (np.pi/2)*D_chrd
 # %% codecell
 X_chrd = chordal_metric.cp_mds(D_chrd, X=X_rand)
 
-# %% codecel
+# %% codecell
 X_geo = geodesic_metric.cp_mds(D_geo, X=X_rand)
 
 # %% codecell
