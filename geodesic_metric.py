@@ -104,11 +104,11 @@ def setup_CPn_cost(D, n):
     """Cost using geodesic metric on CPn."""
     W = distance_to_weights(D)
     C = np.cos(D)**2
-    cj_mtx = np.block([
-        [np.eye(n), np.zeros((n, n))],
-        [np.zeros((n, n)), -np.eye(n)]])
+    i_mtx = np.vstack(
+        (np.hstack((np.zeros((n, n)), -np.eye(n))),
+        np.hstack((np.eye(n), np.zeros((n, n))))))
     def cost(Y):
-        return 0.5*np.linalg.norm(((cj_mtx@Y).T @ Y) * (Y.T @ (cj_mtx@Y)) - C)**2
+        return 0.5*np.linalg.norm(W * ((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2 - C))**2
     return cost
 
 def distance_to_weights(D):

@@ -48,7 +48,6 @@ plt.show()
 
 # %% codecell
 c = np.linalg.norm(data, axis=1)
-print(c.shape)
 cc = np.reshape(c, (20,20))
 fig, ax = plt.subplots()
 ax.imshow(cc, cmap='cividis')
@@ -84,6 +83,7 @@ D_geo = (np.pi/2)*D_chrd
 X_chrd = chordal_metric.cp_mds(D_chrd, X=X_rand)
 
 # %% codecell
+reload(geodesic_metric)
 X_geo = geodesic_metric.cp_mds(D_geo, X=X_rand)
 
 # %% codecell
