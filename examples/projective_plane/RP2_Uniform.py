@@ -6,19 +6,20 @@ from ripser import ripser
 from persim import plot_diagrams
 import real_projective
 import cplx_projective
-from examples import pipeline   # Note: to make this work, install
+import pipeline   # Note: to make this work, install
             # package in editable mode, `pip install -e .` in root directory.
 from ppca import ppca
 from visualization import my3dscatterplot
 import pymanopt
-import chordal_metric
-import geodesic_metric
+import chordal_mds
+import geodesic_mds
+import geometry
 from importlib import reload
 from scipy.spatial.distance import pdist, squareform    # For some reason I have to
                                             # import this, instead of just
                                             # running it?
 # %% codecell
-reload(real_projective)
+reload(pipeline)
 
 # %% codecell
 # Uniformly sample points from the sphere.
@@ -66,7 +67,7 @@ proj_coords = pipeline.proj_coordinates(part_func, eta)
 print('Computing distance matrix of projective coordinates.')
 D_pc = real_projective.projective_distance_matrix(proj_coords.T)
 print('Estimating geodesic distance matrix.')
-D_geo = real_projective.geo_distance_matrix(D_pc, k=12)
+D_geo = pipeline.geo_distance_matrix(D_pc, k=12)
 
 # %% codecell
 # Compute PH of landmarks of high-dimensional data.
@@ -75,7 +76,7 @@ PH_pc2 = ripser(D_geo[idx,:][:,idx], distance_matrix=True, maxdim=1, coeff=2)
 plot_diagrams(PH_pc2['dgms'])
 plt.title('Persistence of Projective Coordinates ($F_2$)')
 plt.show()
-PH_pc2 = ripser(D_geo[idx,:][:,idx], distance_matrix=True, maxdim=1, coeff=3)
+PH_pc3 = ripser(D_geo[idx,:][:,idx], distance_matrix=True, maxdim=1, coeff=3)
 plot_diagrams(PH_pc3['dgms'])
 plt.title('Persistence of Projective Coordinates ($F_3$)')
 plt.show()
@@ -96,11 +97,11 @@ plt.show()
 
 # %% codecell
 # Apply MDS with squared geodesic cost function.
-X_mds = geodesic_metric.rp_mds(D_geo, X=X_ppca.T)
+X_mds = geodesic_mds.rp_mds(D_geo, X=X_ppca.T)
 
 # %% codecell
 # Compute persistence of MDS output.
-D_mds = geodesic_metric.RPn_distance_matrix(X_mds)
+D_mds = geometry.RPn_geo_distance_matrix(X_mds)
 PH_mds2 = ripser(D_mds[idx,:][:,idx], distance_matrix=True, maxdim=1, coeff=2)
 plot_diagrams(PH_mds2['dgms'])
 plt.title('Persistence of geodesic MDS Output ($F_2$)')
@@ -129,7 +130,7 @@ ax.set_title('MDS (geodesic) Embedding.')
 plt.show()
 # %% codecell
 D_goal = D_geo/np.max(D_geo)
-X_chrd = chordal_metric.rp_mds(D_goal, X=X_ppca.T)
+X_chrd = chordal_mds.rp_mds(D_goal, X=X_ppca.T)
 
 # %% codecell
 neg_idx = np.where(X_chrd[2,:] < 0)
@@ -142,7 +143,7 @@ plt.show()
 
 # %% codecell
 # Compute persistence of MDS output.
-D_out = geodesic_metric.RPn_distance_matrix(X_chrd)
+D_out = geometry.RPn_geo_distance_matrix(X_chrd)
 PH_out2 = ripser(D_out[idx,:][:,idx], distance_matrix=True, maxdim=1, coeff=2)
 plot_diagrams(PH_out2['dgms'])
 plt.title('Persistence of chordal MDS ($F_2$)')
@@ -175,7 +176,6 @@ ax.scatter(X_3[:,0], X_3[:,1], X_3[:,2], c=c, cmap='YlGn')
 plt.title('Metric MDS Embedding into $\mathbb{R}^3$')
 plt.show()
 
-
 # %% codecell
 D_3 = sp.spatial.distance.cdist(X_3, X_3, metric='euclidean')
 PH_3 = ripser(D_3[idx, :][:, idx], distance_matrix=True, maxdim=1)
@@ -200,7 +200,7 @@ plt.show()
 # %% codecell
 print(np.linalg.norm(D_3 - D_goal))
 print(np.linalg.norm(D_4 - D_goal))
-D_out = chordal_metric.RPn_chordal_distance_matrix(X_chrd)
+D_out = geometry.RPn_chordal_distance_matrix(X_chrd)
 print(np.linalg.norm(D_out - D_goal))
 # %% markdown
 # Weirdly, the Euclidean embedding _is_ recovering the distances better overall.

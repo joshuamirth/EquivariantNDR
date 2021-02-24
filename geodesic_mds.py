@@ -8,39 +8,19 @@ the "Oblique" manifold defined in pymanopt.
 
 import autograd.numpy as np
 import pymanopt
+from geometry import acos_validate, distance_to_weights
 
-def RPn_chordal_distance_matrix(X):
-    D = np.sqrt(sqrt_validate(1 - (X.T@X)**2))
-    np.fill_diagonal(D, 0)
-    return D
-
-def CPn_chordal_distance_matrix(X):
-    # TODO: fix to use actual complex inner product.
-    n = int(X.shape[0]/2)
-    i_mtx = np.block([
-        [np.zeros((n, n)), -np.eye(n)],
-        [np.eye(n), np.zeros((n, n))]
-        ])
-    D = np.sqrt(sqrt_validate(1 - ((X.T @ X)**2 + (X.T @ (i_mtx@X))**2)))
-    np.fill_diagonal(D, 0)
-    return D
-
-def sqrt_validate(X):
-    """Replace matrix with entries > 0."""
-    tol = 1e-9
-    x_min = np.min(X)
-    if x_min > 0:
-        return X
-    elif x_min < -tol:
-        print('WARNING: matrix contains nontrivial negative values.')
-    bad_idx = X < 0
-    X[bad_idx] = 0
-    return X
-
+###############################################################################
+# MDS Algorithms
+################################################################################
 
 def rp_mds(D, dim=3, X=None):
     """Wrapper function."""
     X_out = main_mds(D, dim=dim, X=X, space='real')
+    return X_out
+
+def cp_mds(D, dim=4, X=None):
+    X_out = main_mds(D, dim=dim, X=X, space='complex')
     return X_out
 
 def main_mds(D, dim=3, X=None, space='real'):
@@ -64,13 +44,13 @@ def main_mds(D, dim=3, X=None, space='real'):
 
     n = D.shape[0]
     max_d = np.max(D)
-    if max_d > 1:
+    if max_d > np.pi/2:
         print('WARNING: maximum value in distance matrix exceeds diameter of '\
-            'projective space. Max distance = $2.4f.' %max_d)
+            'projective space. Max value in distance matrix = %2.4f.' %max_d)
     manifold = pymanopt.manifolds.Oblique(dim, n)
     solver = pymanopt.solvers.ConjugateGradient()
     if space == 'real':
-        cost = setup_cost(D)
+        cost = setup_RPn_cost(D)
     elif space == 'complex':
         cost = setup_CPn_cost(D, int(dim/2))
     problem = pymanopt.Problem(manifold=manifold, cost=cost)
@@ -83,33 +63,51 @@ def main_mds(D, dim=3, X=None, space='real'):
         X_out = solver.solve(problem, x=X)
     return X_out
 
-def setup_cost(D):
-    """Cost when using sine distance."""
-    # TODO: add analytic gradient to this method.
-    A = np.ones(D.shape)
-    C = A - D
-    def cost(X):
-        F = np.linalg.norm((X.T@X)*(X.T@X) - C)**2
-        return F
-    return cost
+################################################################################
+# Cost Functions
+################################################################################
 
-################################################################################
-# Complex Projective Version #
-################################################################################
+def setup_RPn_cost(D):
+    """Create the cost functions for pymanopt.
+
+    The cost function is given by
+        F(X) = ||W * ((X^T X)^2 - cos^2(D))||^2
+    Where `W` is the weight matrix accounting for removing the arccos term.
+    Currently only returns the cost. For better performance, could add gradient
+    as a return value.
+
+    Parameters
+    ----------
+    D : ndarray (n, n)
+        Matrix of target distances.
+
+    Returns
+    -------
+    cost : function
+        Weighted Frobenius norm cost function.
+
+    """
+
+    W = distance_to_weights(D)
+    C = np.cos(D)**2
+    def cost(Y):
+        """Weighted Frobenius norm cost function."""
+        return 0.5*np.linalg.norm(W*(C - (Y.T@Y)**2))**2
+    # def grad(Y):
+        # """Derivative of weighted Frobenius norm cost."""
+        # return 2*Y@(W**2*(Y.T@Y-C))
+    # def hess(Y,H):
+        # """Second derivative (Hessian) of weighted Frobenius norm cost."""
+        # return 2*((W**2*(Y.T@Y-C))@H + (W**2*(Y@H.T + H@Y.T))@Y)
+    return cost
 
 def setup_CPn_cost(D, n):
-    """Cost using chordal metric on CPn."""
-    i_mtx = np.block([
-        [np.zeros((n, n)), -np.eye(n)],
-        [np.eye(n), np.zeros((n, n))]
-        ])
-    A = np.ones(D.shape)
-    C = A - D
-    def cost(X):
-        F = np.linalg.norm((X.T @ X)**2 + (X.T @ (i_mtx@X))**2 - C)**2
-        return F
+    """Cost using geodesic metric on CPn."""
+    W = distance_to_weights(D)
+    C = np.cos(D)**2
+    i_mtx = np.vstack(
+        (np.hstack((np.zeros((n, n)), -np.eye(n))),
+        np.hstack((np.eye(n), np.zeros((n, n))))))
+    def cost(Y):
+        return 0.5*np.linalg.norm(W * ((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2 - C))**2
     return cost
-
-def cp_mds(D, dim=4, X=None):
-    X_out = main_mds(D, dim=dim, X=X, space='complex')
-    return X_out

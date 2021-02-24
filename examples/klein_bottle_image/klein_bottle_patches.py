@@ -1,18 +1,19 @@
 # Script for constructing the data set of image patches realizing Klein bottle.
 
+# %% codecell
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
 from ripser import ripser
 from persim import plot_diagrams
-import geodesic_metric
-from examples import pipeline   # Note: to make this work, install
-            # package in editable mode, `pip install -e .` in root directory.
+import geodesic_mds
 from scipy.spatial.distance import pdist    # For some reason I have to
                                             # import this, instead of just
                                             # running it?
 from numpy.random import default_rng
 from ppca import ppca
+import pipeline
+import geometry
 
 #-----------------------------------------------------------------------------#
 # Functions copied from Joe which create the image patches.
@@ -127,7 +128,7 @@ eta2, birth2, death2 = pipeline.prominent_cocycle(cocycles, diagram,
 part_func = pipeline.partition_unity(D, .45, sub_ind, bump_type='quadratic')
 proj_coords = pipeline.proj_coordinates(part_func, eta)
 D_pc = real_projective.projective_distance_matrix(proj_coords.T)
-D_geo = real_projective.geo_distance_matrix(D_pc, k=8)
+D_geo = pipeline.geo_distance_matrix(D_pc, k=8)
 
 # %% codecell
 # Compute PH of landmarks of high-dimensional data.
@@ -151,12 +152,12 @@ plt.show()
 
 # %% codecell
 # Apply MDS to PCA output.
-X_mds = geodesic_metric.rp_mds(D_geo, X=X_ppca.T)
+X_mds = geodesic_mds.rp_mds(D_geo, X=X_ppca.T)
 #X_mds = real_projective.pmds(X_ppca, D_geo, max_iter=100)
 
 # %% codecell
 # Compute persistence of MDS output.
-D_mds = geodesic_metric.RPn_distance_matrix(X_mds)
+D_mds = geometry.RPn_geo_distance_matrix(X_mds)
 PH_mds = ripser(D_mds, distance_matrix=True, maxdim=1, coeff=2)
 plot_diagrams(PH_mds['dgms'])
 plt.title('Peristence of MDS Output')

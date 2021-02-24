@@ -5,10 +5,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from ripser import ripser
 from persim import plot_diagrams
-from examples import pipeline
+import pipeline
 import cplx_projective
-import chordal_metric
-import geodesic_metric
+import chordal_mds
+import geodesic_mds
+import geometry
 from scipy.spatial.distance import pdist, squareform    # For some reason I have to
                                             # import this, instead of just
                                             # running it?
@@ -80,15 +81,15 @@ D_chrd = D_sub / np.max(D_sub)
 D_geo = (np.pi/2)*D_chrd
 
 # %% codecell
-X_chrd = chordal_metric.cp_mds(D_chrd, X=X_rand)
+X_chrd = chordal_mds.cp_mds(D_chrd, X=X_rand)
 
 # %% codecell
-reload(geodesic_metric)
-X_geo = geodesic_metric.cp_mds(D_geo, X=X_rand)
+reload(geodesic_mds)
+X_geo = geodesic_mds.cp_mds(D_geo, X=X_rand)
 
 # %% codecell
-D_out_g = geodesic_metric.CPn_distance_matrix(X_geo)
-D_out_c = chordal_metric.CPn_chordal_distance_matrix(X_chrd)
+D_out_g = geometry.CPn_geo_distance_matrix(X_geo)
+D_out_c = geometry.CPn_chordal_distance_matrix(X_chrd)
 
 # %% codecell
 PH_geo = ripser(D_out_g, distance_matrix=True, maxdim=2)

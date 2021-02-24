@@ -7,8 +7,9 @@ import autograd.numpy as np
 import matplotlib.pyplot as plt
 from ripser import ripser
 from persim import plot_diagrams
-import geodesic_metric
-import chordal_metric
+import geodesic_mds
+import chordal_mds
+import geometry
 
 # Import the data and list what is in it.
 # %% codecell
@@ -40,7 +41,7 @@ plt.show()
 # First we will run the chordal metric version of MDS. This does not work well.
 # %% codecell
 D_goal = np.sin(D_geo)
-X_out = chordal_metric.rp_mds(D_goal)
+X_out = chordal_mds.rp_mds(D_goal)
 
 # %% codecell
 fig = plt.figure(figsize=(5,5))
@@ -59,7 +60,7 @@ plt.show()
 # Now perform the same experiment using the squared distances cost function.
 
 # %%codecell
-X_square = geodesic_metric.rp_mds(D_geo, X=X_ppca.T)
+X_square = geodesic_mds.rp_mds(D_geo, X=X_ppca.T)
 
 # %% codecell
 fig = plt.figure()
@@ -92,7 +93,7 @@ plt.show()
 print(np.linalg.norm(D_geo - D_square))
 
 # %% codecell
-D_out = chordal_metric.RPn_chordal_distance_matrix(X_out)
+D_out = geometry.RPn_chordal_distance_matrix(X_out)
 D_diff = D_goal - D_out
 plt.imshow(D_diff, cmap='cividis')
 plt.title('Chordal Metric Difference')
@@ -153,7 +154,7 @@ plt.show()
 rng = np.random.default_rng()
 X_rand = rng.standard_normal((3, 500))
 X_rand = X_rand/np.linalg.norm(X_rand, axis=0)
-X_mds_r = geodesic_metric.rp_mds(D, X=X_rand)
+X_mds_r = geodesic_mds.rp_mds(D, X=X_rand)
 
 
 # %% codecell
@@ -198,15 +199,15 @@ plt.show()
 # # I don't really understand how this can be this...okay?
 # # ## Chordal the Whole Way
 # # %% codecell
-# D_c = chordal_metric.RPn_chordal_distance_matrix(B.T)
+# D_c = chordal_mds.RPn_chordal_distance_matrix(B.T)
 # # %% codecell
 # PH_c = ripser(D_c, distance_matrix=True, maxdim=1)
 # plot_diagrams(PH_c['dgms'])
 # plt.show()
 # # %% codecell
-# X_c = chordal_metric.rp_mds(D_c)
+# X_c = chordal_mds.rp_mds(D_c)
 # # %% codecell
-# D_c = chordal_metric.RPn_chordal_distance_matrix(X_c)
+# D_c = chordal_mds.RPn_chordal_distance_matrix(X_c)
 # # %% codecell
 # PH_c = ripser(D_c, distance_matrix=True, maxdim=1)
 # plot_diagrams(PH_c['dgms'])
@@ -219,13 +220,13 @@ plt.show()
 # plt.show()
 # # %% codecell
 # # Now estimate "geodesic" distances within the chordal manifold.
-# D_c_geo = real_projective.geo_distance_matrix(D_c)
+# D_c_geo = pipeline.geo_distance_matrix(D_c)
 # # %% codecell
 # PH_c_geo = ripser(D_c_geo, distance_matrix=True, maxdim=1)
 # plot_diagrams(PH_c_geo['dgms'])
 # plt.show()
 # # %% codecell
-# X_c = chordal_metric.rp_mds(D_c_geo)
+# X_c = chordal_mds.rp_mds(D_c_geo)
 # # %% codecell
 # fig = plt.figure()
 # ax = fig.add_subplot(111, projection='3d')
@@ -233,7 +234,7 @@ plt.show()
 # ax.scatter(-X_c[0,:], -X_c[1,:], -X_c[2,:])
 # plt.show()
 # # %% codecell
-# D_out_c_geo = chordal_metric.RPn_chordal_distance_matrix(X_c)
+# D_out_c_geo = chordal_mds.RPn_chordal_distance_matrix(X_c)
 # PH_out_c_geo = ripser(D_out_c_geo, distance_matrix=True, maxdim=1)
 # plot_diagrams(PH_out_c_geo['dgms'])
 # plt.show()

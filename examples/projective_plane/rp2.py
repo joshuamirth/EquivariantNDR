@@ -66,7 +66,7 @@ proj_coords = pipeline.proj_coordinates(part_func, eta)
 print('Computing distance matrix of projective coordinates.')
 D_pc = real_projective.projective_distance_matrix(proj_coords.T)
 print('Estimating geodesic distance matrix.')
-D_geo = real_projective.geo_distance_matrix(D_pc, k=8)
+D_geo = pipeline.geo_distance_matrix(D_pc, k=8)
 # Compute PH of landmarks of high-dimensional data.
 print('Computing persistence of projective coordinates.')
 PH_pc = ripser(D_geo[idx,:][:,idx], distance_matrix=True, maxdim=1, coeff=2)

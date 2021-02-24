@@ -78,7 +78,7 @@ eta, birth, death = pipeline.prominent_cocycle(cocycles, diagram,
 part_func = pipeline.partition_unity(D, .25, sub_ind, bump_type='quadratic')
 proj_coords = pipeline.proj_coordinates(part_func, eta)
 D_pc = real_projective.projective_distance_matrix(proj_coords.T)
-D_geo = real_projective.geo_distance_matrix(D_pc, k=8)
+D_geo = pipeline.geo_distance_matrix(D_pc, k=8)
 # Compute PH of landmarks of high-dimensional data.
 PH_pc = ripser(D_geo, distance_matrix=True, maxdim=2, coeff=2)
 plot_diagrams(PH_pc['dgms'])
