@@ -102,7 +102,7 @@ def setup_RPn_cost(D):
 
 def setup_CPn_cost(D, n):
     """Cost using geodesic metric on CPn."""
-    W = distance_to_sq_weights(D)
+    W = distance_to_weights(D)
     C = np.cos(D)**2
     cj_mtx = np.block([
         [np.eye(n), np.zeros((n, n))],
