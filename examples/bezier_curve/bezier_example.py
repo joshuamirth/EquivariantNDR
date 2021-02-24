@@ -67,7 +67,7 @@ ax = fig.add_subplot(111, projection='3d')
 ax.scatter(X_square[0,:], X_square[1,:], X_square[2,:])
 ax.scatter(-X_square[0,:], -X_square[1,:], -X_square[2,:])
 ax.view_init(30, -20) #elev, azim pair. Default 30, -60.
-ax.set_title('Squared Cost Output')
+ax.set_title('Squared Geodesic MDS Output')
 plt.show()
 
 # %% codecell
@@ -155,7 +155,16 @@ X_rand = rng.standard_normal((3, 500))
 X_rand = X_rand/np.linalg.norm(X_rand, axis=0)
 X_mds_r = geodesic_metric.rp_mds(D, X=X_rand)
 
+
 # %% codecell
+def align_representatives(X):
+    """Place all points in the upper hemisphere."""
+    neg_idx = np.where(X[2,:] < 0)
+    X[:,neg_idx] = -X[:,neg_idx]
+    return X
+
+# %% codecell
+X_mds_r = align_representatives(X_mds_r)
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 ax.scatter(X_mds_r[0,:], X_mds_r[1,:], X_mds_r[2,:])
