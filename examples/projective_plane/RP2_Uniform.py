@@ -4,8 +4,8 @@ import scipy as sp
 import matplotlib.pyplot as plt
 from ripser import ripser
 from persim import plot_diagrams
-import real_projective
-import cplx_projective
+# import real_projective
+# import cplx_projective
 import pipeline   # Note: to make this work, install
             # package in editable mode, `pip install -e .` in root directory.
 from ppca import ppca
@@ -31,7 +31,7 @@ RP = RP/np.linalg.norm(RP, axis=0)
 # Place all points onto their upper hemisphere representative.
 neg_idx = np.where(RP[2,:] < 0)
 RP[:,neg_idx] = -RP[:,neg_idx]
-D = real_projective.projective_distance_matrix(RP.T)
+D = geometry.RPn_geo_distance_matrix(RP)
 
 # %% codecell
 c = np.linalg.norm(RP[0:2,:],axis=0) # Distance from origin
@@ -65,7 +65,7 @@ part_func = pipeline.partition_unity(D, 0.26, idx, bump_type='quadratic')
 print('Finding projective coordinates.')
 proj_coords = pipeline.proj_coordinates(part_func, eta)
 print('Computing distance matrix of projective coordinates.')
-D_pc = real_projective.projective_distance_matrix(proj_coords.T)
+D_pc = geometry.RPn_geo_distance_matrix(proj_coords)
 print('Estimating geodesic distance matrix.')
 D_geo = pipeline.geo_distance_matrix(D_pc, k=12)
 
@@ -85,7 +85,7 @@ plt.show()
 # Reduce dimension using PCA:
 X_ppca = ppca(proj_coords.T, 2)['X']
 # Compute persistence of PCA output.
-D_ppca = real_projective.projective_distance_matrix(X_ppca)
+D_ppca = geometry.RPn_geo_distance_matrix(X_ppca.T)
 PH_ppca2 = ripser(D_ppca[idx,:][:,idx], distance_matrix=True, maxdim=1, coeff=2)
 plot_diagrams(PH_ppca2['dgms'])
 plt.title('Persistence of PPCA Embedding ($F_2$)')
@@ -97,7 +97,7 @@ plt.show()
 
 # %% codecell
 # Apply MDS with squared geodesic cost function.
-X_mds = geodesic_mds.rp_mds(D_geo, X=X_ppca.T)
+X_mds = geodesic_mds.rp_mds(D_geo)
 
 # %% codecell
 # Compute persistence of MDS output.
@@ -159,7 +159,7 @@ plt.show()
 # Compare the different methods here and classical MDS.
 # %% codecell
 # Do classical MDS of the distance matrix.
-A = -0.5*D_goal**2
+A = -0.5*D_geo**2
 H = np.eye(N) - (1/N)*np.ones((N,N)) # centering matrix
 B = H@A@H
 L, G = np.linalg.eig(B)
@@ -198,20 +198,26 @@ plt.title('Metric MDS Persistence ($\mathbb{R}^5$)')
 plt.show()
 
 # %% codecell
-print(np.linalg.norm(D_3 - D_goal))
-print(np.linalg.norm(D_4 - D_goal))
-D_out = geometry.RPn_chordal_distance_matrix(X_chrd)
-print(np.linalg.norm(D_out - D_goal))
+print('Difference in L2 cost:')
+print(np.linalg.norm(D_3 - D_geo))
+print(np.linalg.norm(D_4 - D_geo))
+print(np.linalg.norm(D_5 - D_geo))
+print(np.linalg.norm(D_out - D_geo))
+print('Difference in L-infinity cost:')
+print(np.linalg.norm(D_3 - D_geo, np.inf))
+print(np.linalg.norm(D_4 - D_geo, np.inf))
+print(np.linalg.norm(D_5 - D_geo, np.inf))
+print(np.linalg.norm(D_out - D_geo, np.inf))
+
 # %% markdown
-# Weirdly, the Euclidean embedding _is_ recovering the distances better overall.
 # %% codecell
-D_out = (D_out + D_out.T)/2
-np.fill_diagonal(D_out, 0)
+# D_out = (D_out + D_out.T)/2
+# np.fill_diagonal(D_out, 0)
 # %% codecell
 D_3vec = squareform(D_3)
 D_4vec = squareform(D_4)
 D_outvec = squareform(D_out)
-D_vec = squareform(D_goal)
+D_vec = squareform(D_geo)
 
 # %% codecell
 fig, ax = plt.subplots()

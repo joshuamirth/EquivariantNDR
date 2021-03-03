@@ -10,6 +10,7 @@ from persim import plot_diagrams
 import geodesic_mds
 import chordal_mds
 import geometry
+from importlib import reload
 
 # Import the data and list what is in it.
 # %% codecell
@@ -40,8 +41,9 @@ plt.show()
 # %% markdown
 # First we will run the chordal metric version of MDS. This does not work well.
 # %% codecell
+reload(chordal_mds)
 D_goal = np.sin(D_geo)
-X_out = chordal_mds.rp_mds(D_goal)
+X_out = chordal_mds.rp_mds(D_goal, X=X_ppca.T)
 
 # %% codecell
 fig = plt.figure(figsize=(5,5))

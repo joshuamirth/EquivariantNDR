@@ -8,6 +8,8 @@ the "Oblique" manifold defined in pymanopt.
 
 import autograd.numpy as np
 import pymanopt
+from pymanopt.manifolds import Oblique
+from pymanopt.solvers import ConjugateGradient
 
 def rp_mds(D, dim=3, X=None):
     """Wrapper function."""
@@ -38,8 +40,8 @@ def main_mds(D, dim=3, X=None, space='real'):
     if max_d > 1:
         print('WARNING: maximum value in distance matrix exceeds diameter of '\
             'projective space. Max distance = $2.4f.' %max_d)
-    manifold = pymanopt.manifolds.Oblique(dim, n)
-    solver = pymanopt.solvers.ConjugateGradient()
+    manifold = Oblique(dim, n)
+    solver = ConjugateGradient()
     if space == 'real':
         cost = setup_cost(D)
     elif space == 'complex':

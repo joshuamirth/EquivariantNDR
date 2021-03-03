@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from ripser import ripser
 from persim import plot_diagrams
 import pipeline
-import cplx_projective
 import chordal_mds
 import geodesic_mds
 import geometry
@@ -60,7 +59,7 @@ D = sp.spatial.distance.cdist(data, data, metric='euclidean')
 # TODO: improve this maxmin function.
 sub_ind = pipeline.maxmin_subsample_distance_matrix(D, n_landmarks, seed=[57])['indices']
 D_sub = D[sub_ind, :][:, sub_ind]
-PH = ripser(D, distance_matrix=True, maxdim=2)
+PH = ripser(D_sub, distance_matrix=True, maxdim=2)
 plot_diagrams(PH['dgms'])
 plt.show()
 # If the parameters are chosen well the PH should have a nice H^2 class.
@@ -84,7 +83,6 @@ D_geo = (np.pi/2)*D_chrd
 X_chrd = chordal_mds.cp_mds(D_chrd, X=X_rand)
 
 # %% codecell
-reload(geodesic_mds)
 X_geo = geodesic_mds.cp_mds(D_geo, X=X_rand)
 
 # %% codecell
@@ -93,20 +91,20 @@ D_out_c = geometry.CPn_chordal_distance_matrix(X_chrd)
 
 # %% codecell
 PH_geo = ripser(D_out_g, distance_matrix=True, maxdim=2)
-plot_diagrams(PH_out['dgms'])
+plot_diagrams(PH_geo['dgms'])
 plt.title('Persistence with Squared Geodesic Metric')
 plt.show()
 
 # %% codecell
 PH_chrd = ripser(D_out_c, distance_matrix=True, maxdim=2)
-plot_diagrams(PH_out['dgms'])
+plot_diagrams(PH_chrd['dgms'])
 plt.title('Persistence with Chordal Metric')
 plt.show()
 
 # %% codecell
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-vis = cplx_projective.hopf(X_geo)
+vis = geometry.hopf(X_geo)
 ax.scatter(vis[0,:], vis[1,:], vis[2,:], c=c[sub_ind], cmap='cividis')
 ax.set_title('Output of Squared Geodesic Metric')
 plt.show()
@@ -114,7 +112,7 @@ plt.show()
 # %% codecell
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-vis = cplx_projective.hopf(X_chrd)
+vis = geometry.hopf(X_chrd)
 ax.scatter(vis[0,:], vis[1,:], vis[2,:], c=c[sub_ind], cmap='cividis')
 ax.set_title('Output of Chordal Metric')
 plt.show()
@@ -122,9 +120,9 @@ plt.show()
 # %% codecell
 def riemann_sphere(X):
     """X : ndarray of column vectors."""
-    X_cplx = cplx_projective.complexify(X)
+    X_cplx = geometry.complexify(X)
     RS = X_cplx[0,:] / X_cplx[1,:]
-    RS = cplx_projective.realify(RS)
+    RS = geometry.realify(RS)
     return RS
 
 # %% codecell
