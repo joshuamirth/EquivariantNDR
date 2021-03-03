@@ -4,6 +4,62 @@
 import numpy as np
 import numpy.linalg as LA
 from ripser import ripser
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import floyd_warshall
+
+def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
+    """Approximate a geodesic distance matrix.
+
+    Given a distance matrix uses either an epsilon neighborhood or a
+    k-NN algorithm to find nearby points, then builds a distance matrix
+    such that nearby points have their ambient distance as defined by
+    the original distance matrix, while far away points are given the
+    shortest path distance in the graph.
+
+    Parameters
+    ----------
+    data : ndarray
+        Data as an n*2 matrix, assumed to lie on RP^n (i.e. S^n).
+    epsilon : float, optional
+        Radius of neighborhood when constructing graph. Default is ~pi/8.
+    k : int, optional
+        Number of nearest neighbors in k-NN graph. Default is -1 (i.e.
+        use epsilon neighborhoods).
+
+    Returns
+    -------
+    Dhat : ndarray
+        Square distance matrix matrix of the graph. Distances are
+        normalized to correspond to RP^n, i.e. Dhat is scaled so the
+        maximum distance is no larger than pi/2.
+
+    Raises
+    ------
+    ValueError
+        If the provided value of epsilon or k is too small, the graph
+        may not be connected, giving infinite values in the distance
+        matrix. A value error is raised if this occurs, as the later
+        algorithms do not handle infinite values smoothly.
+
+    """
+
+    # Use kNN. Sort twice to get nearest neighbour list.
+    if k > 0:
+        D_sort = np.argsort(np.argsort(D))
+        A = D_sort <= k
+        A = (A + A.T)/2
+    # Use epsilon neighborhoods.
+    else:
+        A = D<epsilon
+    G = csr_matrix(D*A)                   # Matrix representation of graph
+    Dg = floyd_warshall(G,directed=False)     # Path-length distance matrix
+    if np.isinf(np.max(Dg)):
+        raise ValueError('The distance matrix contains infinite values, ' +
+            'indicating that the graph is not connected. Try a larger value ' +
+            'of epsilon or k.')
+    Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
+    np.fill_diagonal(Dhat, 0)
+    return Dhat
 
 def prominent_cocycle(
     cocycles,
@@ -308,36 +364,6 @@ def lens_coordinates(
             break
     return X
 
-def acos_validate(M,tol=1e-6):
-    """Replace values outside of domain of acos with +/- 1.
-
-    Parameters
-    ----------
-    M : ndarray (m,n)
-        Input matrix.
-    tol : float
-        Raises a warning if the values of `M` lie outside of
-        [-1-tol,1+tol]. Default is `1e-6`.
-
-    Returns
-    -------
-    M : ndarray (m,n)
-        Matrix with values > 1 replaced by 1.0 and values < -1 replaced
-        by -1.0. Modifies the input matrix in-place.
-
-    Examples
-    --------
-
-    """
-
-    if  np.max(M) > 1 + tol or np.min(M) < -1 - tol:
-        print('Warning: matrix contained a value of %2.4f. Input may be '\
-            'outside of [-1,1] by more than floating point error.' %np.max(M))
-    big_vals = M >= 1.0
-    M[big_vals] = 1.0
-    small_vals = M <= -1.0
-    M[small_vals] = -1.0
-    return M
 
 def rotate_to_pole(v):
     """Rotation matrix aligning vector with last standard basis vector.
