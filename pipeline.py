@@ -364,6 +364,77 @@ def lens_coordinates(
             break
     return X
 
+def CPn_coordinates(partition_function, cocycle):
+    """Projective coordinates in complex space."""
+
+def integer_lift(cocycle, p):
+    """
+    Turn a cocycle with Z_p coefficients into an integer cocycle.
+
+    Parameters
+    ----------
+    cocycle: ndarray
+        Cocycle with coefficients mod `p`.
+    p : int
+        Prime with which coefficients are computed. Recommended that `p > 2`.
+
+    Returns
+    -------
+    Z_cocycle : ndarray
+        Cocycle with coefficients lifted to `Z`.
+
+    Notes:
+    ------
+    No check is performed to confirm that the cocycle is in the kernel.
+
+    """
+
+    Z_vals = np.copy(cocycle[:,-1])
+    shifts = np.where(Z_vals > (p-1)/2)
+    Z_vals [shifts] -= p
+    Z_cocycle = np.column_stack((cocycle[:,0:-1], Z_vals))
+    return Z_cocycle
+
+def harmonic_cocycle(beta, cobdry):
+    return None
+
+def coboundary(D_mtx, p, filtration):
+    """Compute the coboundary matrix for the Rips complex."""
+    # Explicitly construct 2-skeleton of the Vietoris-Rips complex.
+    # This lists the 0-, 1-, and 2-cells of the complex in lex order.
+    n = D_mtx.shape[0]
+    verts = np.arange(0, n)
+    A = np.triu(D_mtx < filtration, k=1)
+    edge1, edge2 = np.where(A == 1)
+    edges = np.column_stack((edge1, edge2))
+    tetra = []
+    for i in range(n):
+        for j in range(i,n):
+            for k in range(j,n):
+                if A[i,j]*A[j,k]*A[i,k]:
+                    tetra.append([i,j,k])
+    tetra = np.array(tetra)
+    edge_dict = edge_index(edges)
+    # Construct the coboundary matrix:
+    cobdry = np.zeros((tetra.shape[0], edges.shape[0]))
+    for i in range(tetra.shape[0]):
+        bdry = [str(tetra[i,1:3]), str(np.array([tetra[i,0], tetra[i,2]])), str(tetra[i,0:2])]
+        cobdry[i, edge_dict[bdry[0]]] = 1
+        cobdry[i, edge_dict[bdry[1]]] = -1
+        cobdry[i, edge_dict[bdry[2]]] = 1
+    # Solve the least squares problem.
+    # nu' = argmin|| beta - d*nu||
+    # theta = beta - d*nu'
+    return cobdry
+
+def edge_index(edges):
+    """Convert between simplex names and location in array of edges."""
+    edge_names = []
+    edge_dict = {}
+    for i in range(edges.shape[0]):
+        edge_names.append(str(edges[i,:]))
+        edge_dict[edge_names[i]] = i
+    return(edge_dict)
 
 def rotate_to_pole(v):
     """Rotation matrix aligning vector with last standard basis vector.
