@@ -246,7 +246,7 @@ def partition_unity(D, radius, landmarks, bump_type='quadratic'):
     return S
 
 def proj_coordinates(partition_function, cocycle):
-    """Coordinates of data matrix in lens space.
+    """Coordinates of data matrix in real projective space.
 
     Parameters
     ----------
@@ -365,8 +365,49 @@ def lens_coordinates(
     return X
 
 def CPn_coordinates(partition_function, cocycle):
-    """Projective coordinates in complex space."""
-    return None
+    """Coordinates on complex projective space.
+
+    Parameters
+    ----------
+    partition_function : ndarray (d, N)
+        Function describing a partition of unity on the open cover given
+        by a landmark subset. Each of the `d` rows corresponds to the
+        function on the open ball around a landmark, where the `i`-th
+        entry is the value of that function on the `i`-th data point.
+    cocycle : ndarray (d, 4)
+        Cocycle representing choice of persistent H^2 class. The first
+        three columns give the 2-simplices as triples [i,j,k]. The final column
+        is the value corresponding to that simplex. These values are real
+        numbers, since we use the harmonic cocycle in H^2(X,R) for complex
+        projective coordinates.
+
+    Returns
+    -------
+    X : ndarray (d, N)
+        Coordinates of the `N` data points on :math:`\mathbb{C}P^n`.
+
+    """
+    d = partition_function.shape[0] # number of landmarks.
+    N = partition_function.shape[1] # number of data points.
+    used_columns = np.zeros(N)
+    X = np.zeros((d,N))
+    for i in range(d):
+        tmp_eta = np.zeros(d)
+        idx0 = np.where(cocycle[:,0]==i)
+        idx1 = np.where(cocycle[:,1]==i)
+        idx2 = np.where(cocycle[:,2]==i)
+        # TODO: confirm that all positions handled the same way.
+        tmp_eta[cocycle[idx0,1]] = cocycle[idx0,3]
+        tmp_eta[cocycle[idx1,1]] = cocycle[idx1,3]
+        tmp_eta[cocycle[idx2,1]] = cocycle[idx2,3]
+        for k in range(N):
+            if partition_function[i,k] != 0 and not used_columns[k]:
+                used_columns[k] = 1
+                # TODO: update this with complex version of function.
+                X[:,k] = np.sqrt(partition_function[:,k])*((-1)**(tmp_eta))
+        if sum(used_columns) == N:
+            break
+    return X
 
 def integer_lift(cocycle, p):
     """
@@ -438,10 +479,11 @@ def harmonic_cocycle(beta, D_mtx, p, filtration):
     # nu' = argmin|| beta - d*nu||
     # theta = beta - d*nu'
     # Numerically this is not the optimal method. TODO: update.
-    nu = np.linalg.inv(cobdry.T @ cobdry) @ cobdry.T @ beta_vec
-    theta_val = beta_vec - cobdry@nu
+    nu_val = np.linalg.inv(cobdry.T @ cobdry) @ cobdry.T @ beta_vec
+    theta_val = beta_vec - cobdry@nu_val
     theta = np.column_stack((tetra[:,0], tetra[:,1], tetra[:,2], theta_val,))
-    return theta
+    nu = np.column_stack((edges[:,0], edges[:,1], nu_val,))
+    return theta, nu
 
 def simplex_index(edges):
     """Convert between simplex names and location in array of edges."""
