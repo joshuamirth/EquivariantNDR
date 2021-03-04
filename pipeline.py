@@ -366,6 +366,7 @@ def lens_coordinates(
 
 def CPn_coordinates(partition_function, cocycle):
     """Projective coordinates in complex space."""
+    return None
 
 def integer_lift(cocycle, p):
     """
@@ -395,39 +396,54 @@ def integer_lift(cocycle, p):
     Z_cocycle = np.column_stack((cocycle[:,0:-1], Z_vals))
     return Z_cocycle
 
-def harmonic_cocycle(beta, cobdry):
-    return None
-
-def coboundary(D_mtx, p, filtration):
+def harmonic_cocycle(beta, D_mtx, p, filtration):
     """Compute the coboundary matrix for the Rips complex."""
     # Explicitly construct 2-skeleton of the Vietoris-Rips complex.
     # This lists the 0-, 1-, and 2-cells of the complex in lex order.
     n = D_mtx.shape[0]
-    verts = np.arange(0, n)
+    verts = np.arange(0, n)[::-1]   # Reverse order list.
     A = np.triu(D_mtx < filtration, k=1)
     edge1, edge2 = np.where(A == 1)
-    edges = np.column_stack((edge1, edge2))
+    edges = np.column_stack((edge2, edge1))
     tetra = []
     for i in range(n):
         for j in range(i,n):
             for k in range(j,n):
                 if A[i,j]*A[j,k]*A[i,k]:
-                    tetra.append([i,j,k])
+                    tetra.append([k,j,i])   # store in reverse order.
     tetra = np.array(tetra)
-    edge_dict = edge_index(edges)
+    edge_dict = simplex_index(edges)
+    tetr_dict = simplex_index(tetra)
     # Construct the coboundary matrix:
     cobdry = np.zeros((tetra.shape[0], edges.shape[0]))
     for i in range(tetra.shape[0]):
-        bdry = [str(tetra[i,1:3]), str(np.array([tetra[i,0], tetra[i,2]])), str(tetra[i,0:2])]
+        bdry = [str(tetra[i,1:3]),
+            str(np.array([tetra[i,0], tetra[i,2]])),
+            str(tetra[i,0:2])
+            ]
         cobdry[i, edge_dict[bdry[0]]] = 1
         cobdry[i, edge_dict[bdry[1]]] = -1
         cobdry[i, edge_dict[bdry[2]]] = 1
+    # First convert simplex names to a vector.
+    beta_cells = []
+    for i in range(beta.shape[0]):
+        beta_cells.append(str(beta[i,0:3]))
+    beta_idx = []
+    for i in beta_cells:
+        beta_idx.append(tetr_dict[i])
+    beta_val = beta[:,3]
+    beta_vec = np.zeros(tetra.shape[0])
+    beta_vec[beta_idx] = beta_val
     # Solve the least squares problem.
     # nu' = argmin|| beta - d*nu||
     # theta = beta - d*nu'
-    return cobdry
+    # Numerically this is not the optimal method. TODO: update.
+    nu = np.linalg.inv(cobdry.T @ cobdry) @ cobdry.T @ beta_vec
+    theta_val = beta_vec - cobdry@nu
+    theta = np.column_stack((tetra[:,0], tetra[:,1], tetra[:,2], theta_val,))
+    return theta
 
-def edge_index(edges):
+def simplex_index(edges):
     """Convert between simplex names and location in array of edges."""
     edge_names = []
     edge_dict = {}
