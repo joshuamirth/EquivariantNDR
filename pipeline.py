@@ -6,6 +6,7 @@ import numpy.linalg as LA
 from ripser import ripser
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
+import geometry
 
 def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
     """Approximate a geodesic distance matrix.
@@ -364,7 +365,7 @@ def lens_coordinates(
             break
     return X
 
-def CPn_coordinates(partition_function, cocycle):
+def CPn_coordinates(partition_function, theta, nu):
     """Coordinates on complex projective space.
 
     Parameters
@@ -390,23 +391,34 @@ def CPn_coordinates(partition_function, cocycle):
     d = partition_function.shape[0] # number of landmarks.
     N = partition_function.shape[1] # number of data points.
     used_columns = np.zeros(N)
-    X = np.zeros((d,N))
+    Xcplx = np.zeros((d,N), dtype=complex)
+    nu_vals = nu[:,2]
+    nu_coc = nu[:,0:2].astype(int)
+    theta_vals = theta[:,3]
+    theta_coc = theta[:,0:3].astype(int)
     for i in range(d):
-        tmp_eta = np.zeros(d)
-        idx0 = np.where(cocycle[:,0]==i)
-        idx1 = np.where(cocycle[:,1]==i)
-        idx2 = np.where(cocycle[:,2]==i)
-        # TODO: confirm that all positions handled the same way.
-        tmp_eta[cocycle[idx0,1]] = cocycle[idx0,3]
-        tmp_eta[cocycle[idx1,1]] = cocycle[idx1,3]
-        tmp_eta[cocycle[idx2,1]] = cocycle[idx2,3]
+        # Setup nu values (i second term of edges)
+        tmp_nu = np.zeros(d)
+        neg_idx = np.where(nu_coc[:,0]==i)  # want i as the second entry
+        idx = np.where(nu_coc[:,1]==i)
+        tmp_nu[nu_coc[neg_idx,1]] = -nu_vals[neg_idx]
+        tmp_nu[nu_coc[idx,0]] = nu_vals[idx]
+        # Setup theta values (i middle term of simplices).
+        tmp_theta_mtx = np.zeros((d,d))
+        idx0 = np.where(theta_coc[:,0]==i)
+        idx1 = np.where(theta_coc[:,1]==i)
+        idx2 = np.where(theta_coc[:,2]==i)
+        tmp_theta_mtx[theta_coc[idx0,1],theta_coc[idx0,2]] = -theta_vals[idx0]
+        tmp_theta_mtx[theta_coc[idx1,0],theta_coc[idx1,2]] = theta_vals[idx1]
+        tmp_theta_mtx[theta_coc[idx2,0],theta_coc[idx2,1]] = -theta_vals[idx2]
         for k in range(N):
             if partition_function[i,k] != 0 and not used_columns[k]:
                 used_columns[k] = 1
-                # TODO: update this with complex version of function.
-                X[:,k] = np.sqrt(partition_function[:,k])*((-1)**(tmp_eta))
+                coef = tmp_nu + np.sum(tmp_theta_mtx * partition_function[:,k] , axis=0)
+                Xcplx[:,k] = np.sqrt(partition_function[:,k])*np.exp(2*np.pi*1j*coef)
         if sum(used_columns) == N:
             break
+    X = geometry.realify(Xcplx)
     return X
 
 def integer_lift(cocycle, p):
