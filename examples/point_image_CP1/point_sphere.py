@@ -13,6 +13,9 @@ from scipy.spatial.distance import pdist, squareform    # For some reason I have
                                             # import this, instead of just
                                             # running it?
 # %% codecell
+from importlib import reload
+
+# %% codecell
 # Setup parameters
 N = 12  # Create N*N images
 amp = 0.5
@@ -59,8 +62,11 @@ D = sp.spatial.distance.cdist(data, data, metric='euclidean')
 # TODO: improve this maxmin function.
 sub_ind = pipeline.maxmin_subsample_distance_matrix(D, n_landmarks, seed=[57])['indices']
 D_sub = D[sub_ind, :][:, sub_ind]
-PH = ripser(D_sub, distance_matrix=True, maxdim=2)
+p = 13
+PH = ripser(D_sub, distance_matrix=True, maxdim=2, coeff=p, do_cocycles=True)
 plot_diagrams(PH['dgms'])
+plt_title = 'Persistence Diagram (coefficients in $\mathbb{F}_{%d}$)' %p
+plt.title(plt_title)
 plt.show()
 # If the parameters are chosen well the PH should have a nice H^2 class.
 
@@ -147,6 +153,35 @@ print(np.mean(E_geo**2))
 print(np.mean(E_chrd**2))
 print(np.var(E_geo**2))
 print(np.var(E_chrd**2))
+
+# %% codecell
+# Perform the full projective coordinates pipeline.
+# Get the main H^2 cocycle.
+reload(pipeline)
+cocycles = PH['cocycles'][2]
+dgms = PH['dgms'][2]
+eta, birth, death = pipeline.prominent_cocycle(cocycles, dgms)
+# Thresholding is now important! My VR computation doesn't like extra cocycles.
+eta = pipeline.threshold_cocycle(eta, D_sub, radius)
+beta = pipeline.integer_lift(eta, p)
+print(birth, death)
+
+# %% codecell
+radius = death-.01
+theta, nu = pipeline.harmonic_cocycle(beta, D_sub, p, radius)
+
+# %% codecell
+part_func = pipeline.partition_unity(D, radius, sub_ind)
+CPn_coords = pipeline.CPn_coordinates(part_func, theta, nu)
+
+# %% codecell
+print(CPn_coords.shape)
+
+# %% codecell
+D_pc = geometry.CPn_geo_distance_matrix(CPn_coords)
+PH_pc = ripser(D_pc[sub_ind, :][:, sub_ind], distance_matrix=True, maxdim=2)
+plot_diagrams(PH_pc['dgms'])
+plt.show()
 
 # %% codecell
 # TODO: fill in the full projective coordinates pipeline (requires lifting)

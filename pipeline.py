@@ -473,7 +473,6 @@ def harmonic_cocycle(beta, D_mtx, p, filtration):
                 if A[i,j]*A[j,k]*A[i,k]:
                     tris.append([k,j,i])   # store in reverse order.
     tris = np.array(tris)
-    print(tris)
     edge_dict = simplex_index(edges)
     tri_dict = simplex_index(tris)
     # Construct the coboundary matrix:
@@ -499,8 +498,7 @@ def harmonic_cocycle(beta, D_mtx, p, filtration):
     # Solve the least squares problem.
     # nu' = argmin|| beta - d*nu||
     # theta = beta - d*nu'
-    # Numerically this is not the optimal method. TODO: update.
-    nu_val = np.linalg.inv(cobdry.T @ cobdry) @ cobdry.T @ beta_vec
+    nu_val = np.linalg.pinv(cobdry.T @ cobdry) @ cobdry.T @ beta_vec
     theta_val = beta_vec - cobdry@nu_val
     theta = np.column_stack((tris[:,0], tris[:,1], tris[:,2], theta_val,))
     nu = np.column_stack((edges[:,0], edges[:,1], nu_val,))
