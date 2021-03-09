@@ -66,7 +66,6 @@ def prominent_cocycle(
     cocycles,
     diagram,
     order = 1,
-    threshold_at_death = True
 ):
     """Primary cocycle from H_1 persistence for lens coordinate
     representation.
@@ -132,11 +131,9 @@ def prominent_cocycle(
     eta = cocycles[index]
     birth = diagram[index,0]
     death = diagram[index,1]
-    if threshold_at_death:
-        eta = threshold_cocycle(eta, D, death - 1e-6)
     return eta, birth, death
 
-def threshold_cocycle(cocycle,D,threshold):
+def threshold_cocycle(cocycle, D, threshold):
     """Cocycle edges with length less than threshold.
 
     Take a cocycle and return it restricted only to edges which appear
@@ -168,9 +165,20 @@ def threshold_cocycle(cocycle,D,threshold):
     """
 
     bad_rows = []
-    for i in range(cocycle.shape[0]):
-        if D[tuple(cocycle[i,0:2])] >= threshold:
-            bad_rows.append(i)
+    # For 1-cocycles:
+    if cocycle.shape[1] == 3:
+        for i in range(cocycle.shape[0]):
+            if D[tuple(cocycle[i,0:2])] >= threshold:
+                bad_rows.append(i)
+    # For 2-cocycles:
+    elif cocycle.shape[1] == 4:
+        for i in range(cocycle.shape[0]):
+            if D[tuple(cocycle[i,0:2])] >= threshold:
+                bad_rows.append(i)
+            elif D[tuple(cocycle[i,1:3])] >= threshold:
+                bad_rows.append(i)
+            elif D[cocycle[i,0], cocycle[i,2]] >= threshold:
+                bad_rows.append(i)
     threshold_cocycle = np.delete(cocycle,bad_rows,0)
     return threshold_cocycle
 
@@ -411,10 +419,11 @@ def CPn_coordinates(partition_function, theta, nu):
         tmp_theta_mtx[theta_coc[idx0,1],theta_coc[idx0,2]] = -theta_vals[idx0]
         tmp_theta_mtx[theta_coc[idx1,0],theta_coc[idx1,2]] = theta_vals[idx1]
         tmp_theta_mtx[theta_coc[idx2,0],theta_coc[idx2,1]] = -theta_vals[idx2]
+        tmp_theta_mtx += -tmp_theta_mtx.T
         for k in range(N):
             if partition_function[i,k] != 0 and not used_columns[k]:
                 used_columns[k] = 1
-                coef = tmp_nu + np.sum(tmp_theta_mtx * partition_function[:,k] , axis=0)
+                coef = tmp_nu + np.sum(tmp_theta_mtx * partition_function[:,k], axis=1)
                 Xcplx[:,k] = np.sqrt(partition_function[:,k])*np.exp(2*np.pi*1j*coef)
         if sum(used_columns) == N:
             break
@@ -454,25 +463,25 @@ def harmonic_cocycle(beta, D_mtx, p, filtration):
     # Explicitly construct 2-skeleton of the Vietoris-Rips complex.
     # This lists the 0-, 1-, and 2-cells of the complex in lex order.
     n = D_mtx.shape[0]
-    verts = np.arange(0, n)[::-1]   # Reverse order list.
     A = np.triu(D_mtx < filtration, k=1)
     edge1, edge2 = np.where(A == 1)
     edges = np.column_stack((edge2, edge1))
-    tetra = []
+    tris = []
     for i in range(n):
         for j in range(i,n):
             for k in range(j,n):
                 if A[i,j]*A[j,k]*A[i,k]:
-                    tetra.append([k,j,i])   # store in reverse order.
-    tetra = np.array(tetra)
+                    tris.append([k,j,i])   # store in reverse order.
+    tris = np.array(tris)
+    print(tris)
     edge_dict = simplex_index(edges)
-    tetr_dict = simplex_index(tetra)
+    tri_dict = simplex_index(tris)
     # Construct the coboundary matrix:
-    cobdry = np.zeros((tetra.shape[0], edges.shape[0]))
-    for i in range(tetra.shape[0]):
-        bdry = [str(tetra[i,1:3]),
-            str(np.array([tetra[i,0], tetra[i,2]])),
-            str(tetra[i,0:2])
+    cobdry = np.zeros((tris.shape[0], edges.shape[0]))
+    for i in range(tris.shape[0]):
+        bdry = [str(tris[i,1:3]),
+            str(np.array([tris[i,0], tris[i,2]])),
+            str(tris[i,0:2])
             ]
         cobdry[i, edge_dict[bdry[0]]] = 1
         cobdry[i, edge_dict[bdry[1]]] = -1
@@ -483,9 +492,9 @@ def harmonic_cocycle(beta, D_mtx, p, filtration):
         beta_cells.append(str(beta[i,0:3]))
     beta_idx = []
     for i in beta_cells:
-        beta_idx.append(tetr_dict[i])
+        beta_idx.append(tri_dict[i])
     beta_val = beta[:,3]
-    beta_vec = np.zeros(tetra.shape[0])
+    beta_vec = np.zeros(tris.shape[0])
     beta_vec[beta_idx] = beta_val
     # Solve the least squares problem.
     # nu' = argmin|| beta - d*nu||
@@ -493,7 +502,7 @@ def harmonic_cocycle(beta, D_mtx, p, filtration):
     # Numerically this is not the optimal method. TODO: update.
     nu_val = np.linalg.inv(cobdry.T @ cobdry) @ cobdry.T @ beta_vec
     theta_val = beta_vec - cobdry@nu_val
-    theta = np.column_stack((tetra[:,0], tetra[:,1], tetra[:,2], theta_val,))
+    theta = np.column_stack((tris[:,0], tris[:,1], tris[:,2], theta_val,))
     nu = np.column_stack((edges[:,0], edges[:,1], nu_val,))
     return theta, nu
 
