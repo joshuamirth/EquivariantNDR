@@ -8,6 +8,8 @@ the "Oblique" manifold defined in pymanopt.
 
 import autograd.numpy as np
 import pymanopt
+from pymanopt.manifolds import Oblique
+from pymanopt.solvers import ConjugateGradient
 from geometry import acos_validate, distance_to_weights
 
 ###############################################################################
