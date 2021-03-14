@@ -161,26 +161,21 @@ reload(pipeline)
 cocycles = PH['cocycles'][2]
 dgms = PH['dgms'][2]
 eta, birth, death = pipeline.prominent_cocycle(cocycles, dgms)
-# Thresholding is now important! My VR computation doesn't like extra cocycles.
-eta = pipeline.threshold_cocycle(eta, D_sub, radius)
-beta = pipeline.integer_lift(eta, p)
 print(birth, death)
+print(eta.shape)
+# Thresholding is now important! My VR computation doesn't like extra cocycles.
 
 # %% codecell
-radius = death-.01
-theta, nu = pipeline.harmonic_cocycle(beta, D_sub, p, radius)
-
-# %% codecell
-part_func = pipeline.partition_unity(D, radius, sub_ind)
+# Make a big for loop and try a bunch of parameters.
+eta = pipeline.threshold_cocycle(eta, D_sub, birth+.01)
+beta = pipeline.integer_lift(eta, p)
+theta, nu = pipeline.harmonic_cocycle(beta, D_sub, p, birth+.01)
+part_func = pipeline.partition_unity(D, death-.01, sub_ind)
 CPn_coords = pipeline.CPn_coordinates(part_func, theta, nu)
-
-# %% codecell
-print(CPn_coords.shape)
-
-# %% codecell
 D_pc = geometry.CPn_geo_distance_matrix(CPn_coords)
 PH_pc = ripser(D_pc[sub_ind, :][:, sub_ind], distance_matrix=True, maxdim=2)
 plot_diagrams(PH_pc['dgms'])
+plt.title('Persistence with radius parameter %1.3f' %radius)
 plt.show()
 
 # %% codecell
