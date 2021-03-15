@@ -184,13 +184,14 @@ plt.ylabel('y')
 plt.show()
 
 # %% codecell
-X_rand = geodesic_mds.rp_mds(D)
+X_rand = geodesic_mds.rp_mds(D_geo)
 
 # %% codecell
 # Compute persistence of MDS output.
 D_rand = geometry.RPn_geo_distance_matrix(X_rand)
 PH_rand = ripser(D_rand[sub_ind,:][:,sub_ind], distance_matrix=True, maxdim=2)
 plot_diagrams(PH_rand['dgms'])
+plt.title('MDS Embedding (Random IC)')
 plt.show()
 # Save the data.
 #np.savez(filename, xy=xy, xy_sub = xy_sub, D=D, D_sub=D_sub, PH_sub=PH_sub,
@@ -210,4 +211,28 @@ plt.xlabel('x')
 plt.ylabel('y')
 plt.show()
 
+#%%
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+vis = X_rand
+ax.scatter(vis[0,:], vis[1,:], vis[2,:], c=c, cmap='cividis')
+# ax.scatter(-vis[0,:], -vis[1,:], -vis[2,:], c=c, cmap='cividis')
+ax.view_init(30, 30) #elev, azim pair. Default 30, -60.
+ax.set_title('Output of MDS (random initial condition)')
+plt.show()
+
+# %%
+ip = X_rand.T @ X_rand
+n_idx = np.where(ip[:,50]<0)
+X_rand[:,n_idx] *= -1
+fig, ax = plt.subplots()
+ax.scatter(X_rand[0,:], X_rand[1,:], c=c, cmap='cividis')
+draw_circle = plt.Circle((0,0), 1.0+buff/2, fill=False)
+ax.add_artist(draw_circle)
+ax.set(xlim=(-1-buff,1+buff), ylim=(-1-buff,1+buff))
+ax.set_aspect('equal', adjustable='box')
+ax.set_title('MDS Embedding (random IC)')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.show()
 # %%

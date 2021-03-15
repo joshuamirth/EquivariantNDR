@@ -9,6 +9,7 @@ import pipeline
 import chordal_mds
 import geodesic_mds
 import geometry
+import ppca
 from scipy.spatial.distance import pdist, squareform    # For some reason I have to
                                             # import this, instead of just
                                             # running it?
@@ -175,23 +176,45 @@ CPn_coords = pipeline.CPn_coordinates(part_func, theta, nu)
 D_pc = geometry.CPn_geo_distance_matrix(CPn_coords)
 PH_pc = ripser(D_pc[sub_ind, :][:, sub_ind], distance_matrix=True, maxdim=2)
 plot_diagrams(PH_pc['dgms'])
-plt.title('Persistence with radius parameter %1.3f' %radius)
+plt.title('Persistence with radius parameter %1.3f' %(death-.01))
 plt.show()
 
 # %% codecell
-# TODO: fill in the full projective coordinates pipeline (requires lifting)
-# Compute projective coordinates, using a prominent cocycle in dimension 2.
-# cocycles = PH['cocycles'][2]
-# diagram = PH['dgm'][2]
-# part_func = pipeline.partition_unity(D, (death-birth)/2, sub_ind)
-# eta, birth, death = pipeline.prominent_cocycle(cocycles, diagram,
-    # threshold_at_death=False)
-# TODO: apply a Bockstein lift here.
-# TODO: use the harmonic cocycle.
-# TODO: implement complex projective coordinates (or pull from some existing
-# code).
-#proj_coors =
-# Check persistence of projective coordinates.
-# Construct geodesic distance matrix of projective coordinates.
-# Apply PCA
-# Apply MDS.
+CPn_cplx = geometry.complexify(CPn_coords)
+stuff = ppca.ppca(CPn_cplx.T, 1, verbose=True)
+X_ppca = geometry.realify(stuff['X'].T)
+print(X_ppca.shape)
+
+#%%
+D_pca = geometry.CPn_geo_distance_matrix(X_ppca)
+print(D_pca.shape)
+PH_pca = ripser(D_pca[sub_ind,:][:,sub_ind], distance_matrix=True, maxdim=2)
+plot_diagrams(PH_pca['dgms'])
+plt.show()
+
+#%%
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+vis = geometry.hopf(X_ppca)
+ax.scatter(vis[0,:], vis[1,:], vis[2,:], c=c, cmap='cividis')
+ax.set_title('Output of PPCA')
+plt.show()
+
+#%%
+X_mds = geodesic_mds.cp_mds(D_geo, X=X_ppca[:,sub_ind])
+
+#%%
+D_mds = geometry.CPn_geo_distance_matrix(X_mds)
+PH_mds = ripser(D_mds, distance_matrix=True, maxdim=2)
+plot_diagrams(PH_mds['dgms'])
+plt.title('Persistence of MDS (PCA initial condition)')
+plt.show()
+
+#%%
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+vis = geometry.hopf(X_mds)
+ax.scatter(vis[0,:], vis[1,:], vis[2,:], c=c[sub_ind], cmap='cividis')
+ax.set_title('Output of MDS (PCA initial condition)')
+plt.show()
+
