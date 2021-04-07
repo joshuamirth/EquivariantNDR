@@ -52,10 +52,12 @@ def main_mds(D, dim=3, X=None, space='real'):
     manifold = pymanopt.manifolds.Oblique(dim, n)
     solver = pymanopt.solvers.ConjugateGradient()
     if space == 'real':
-        cost = setup_RPn_cost(D)
+        # Set return_grad=False to use auto gradient. Testing shows they are
+        # identical, but analytic grad significantly faster.
+        cost, egrad = setup_RPn_cost(D, return_grad=True)
     elif space == 'complex':
         cost = setup_CPn_cost(D, int(dim/2))
-    problem = pymanopt.Problem(manifold=manifold, cost=cost)
+    problem = pymanopt.Problem(manifold=manifold, cost=cost, egrad=egrad)
     if X is None:
         X_out = solver.solve(problem)
     else:
@@ -69,7 +71,7 @@ def main_mds(D, dim=3, X=None, space='real'):
 # Cost Functions
 ################################################################################
 
-def setup_RPn_cost(D):
+def setup_RPn_cost(D, return_grad=False):
     """Create the cost functions for pymanopt.
 
     The cost function is given by
@@ -95,13 +97,16 @@ def setup_RPn_cost(D):
     def cost(Y):
         """Weighted Frobenius norm cost function."""
         return 0.5*np.linalg.norm(W*(C - (Y.T@Y)**2))**2
+    if return_grad:
+        def grad(Y):
+            """Derivative of the cost function."""
+            return 2*Y@(W**2 * ((Y.T@Y)**2 - C) * 2*(Y.T@Y))
+    else:
+        grad = None
     # def grad(Y):
         # """Derivative of weighted Frobenius norm cost."""
         # return 2*Y@(W**2*(Y.T@Y-C))
-    # def hess(Y,H):
-        # """Second derivative (Hessian) of weighted Frobenius norm cost."""
-        # return 2*((W**2*(Y.T@Y-C))@H + (W**2*(Y@H.T + H@Y.T))@Y)
-    return cost
+    return cost, grad
 
 def setup_CPn_cost(D, n):
     """Cost using geodesic metric on CPn."""
