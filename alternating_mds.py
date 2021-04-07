@@ -6,7 +6,7 @@ import autograd.numpy.linalg as LA
 import pymanopt
 from pymanopt.manifolds import Oblique, Product
 from pymanopt.solvers import ConjugateGradient
-from cplx_projective import norm_rotations, times_i
+from geometry import norm_rotations, times_i
 
 ###############################################################################
 # Real Projective Space Algoirthms

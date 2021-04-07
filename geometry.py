@@ -170,29 +170,3 @@ def norm_compare(Y, Areal, Aimag):
     diff = np.linalg.norm(ip_true - ip_computed)
     imag_err = Areal*ip_imag + Aimag*ip_real
     return diff, imag_err
-
-def hopf(Y):
-    """
-    Map from CP^1 in C^2 = R^4 to the standard representation of S^2
-    in R^3 using the Hopf fibration. This is useful for visualization
-    purposes.
-
-    Parameters
-    ----------
-    Y : ndarray (4, k)
-        Array of `k` points in CP^1 < R^4 = C^2.
-
-    Returns
-    -------
-    S : ndarray (3, k)
-        Array of `k` points in S^2 < R^3.
-
-    """
-
-    if Y.shape[0] != 4:
-        raise ValueError('Points must be in R^4 to apply Hopf map!.')
-    S = np.vstack((
-        [2*Y[0,:]*Y[1,:] + 2*Y[2,:]*Y[3,:]],
-        [-2*Y[0,:]*Y[3,:] + 2*Y[1,:]*Y[2,:]],
-        [Y[0,:]**2 + Y[2,:]**2 - Y[1,:]**2 - Y[3,:]**2]))
-    return S
