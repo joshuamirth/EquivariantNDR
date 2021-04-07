@@ -21,9 +21,9 @@ def rp_mds(D, dim=2, X=None):
     X_out = main_mds(D, dim=dim+1, X=X, space='real')
     return X_out
 
-def cp_mds(D, dim=1, X=None):
-    X_out = main_mds(D, dim=2*dim+2, X=X, space='complex')
-    return X_out
+# def cp_mds(D, dim=1, X=None):
+    # X_out = main_mds(D, dim=2*dim+2, X=X, space='complex')
+    # return X_out
 
 def main_mds(D, dim=3, X=None, space='real'):
     """MDS via gradient descent with the chordal metric.
@@ -52,8 +52,6 @@ def main_mds(D, dim=3, X=None, space='real'):
     manifold = pymanopt.manifolds.Oblique(dim, n)
     solver = pymanopt.solvers.ConjugateGradient()
     if space == 'real':
-        # Set return_grad=False to use auto gradient. Testing shows they are
-        # identical, but analytic grad significantly faster.
         cost, egrad = setup_RPn_cost(D, return_grad=True)
     elif space == 'complex':
         cost = setup_CPn_cost(D, int(dim/2))
@@ -75,7 +73,7 @@ def setup_RPn_cost(D, return_grad=False):
     """Create the cost functions for pymanopt.
 
     The cost function is given by
-        F(X) = ||W * ((X^T X)^2 - cos^2(D))||^2
+        F(X) = (1/2)*||W * |X^T X| - cos(D))||^2
     Where `W` is the weight matrix accounting for removing the arccos term.
     Currently only returns the cost. For better performance, could add gradient
     as a return value.
@@ -95,25 +93,22 @@ def setup_RPn_cost(D, return_grad=False):
     """
 
     W = distance_to_weights(D)
-    C = np.cos(D)**2
+    C = np.cos(D)
     def cost(Y):
         """Weighted Frobenius norm cost function."""
-        return 0.5*np.linalg.norm(W*(C - (Y.T@Y)**2))**2
-    if return_grad:
-        def egrad(Y):
-            """Derivative of the cost function."""
-            return 2*Y@(W**2 * ((Y.T@Y)**2 - C) * 2*(Y.T@Y))
-    else:
-        egrad = None
+        return 0.5*np.linalg.norm(W*(C - Y.T@Y))**2
+    def egrad(Y):
+        """Derivative of the cost function."""
+        return 2*Y@(W**2 * (Y.T@Y - C) * np.sign(Y.T@Y))
     return cost, egrad
 
-def setup_CPn_cost(D, n):
-    """Cost using geodesic metric on CPn."""
-    W = distance_to_weights(D)
-    C = np.cos(D)**2
-    i_mtx = np.vstack(
-        (np.hstack((np.zeros((n, n)), -np.eye(n))),
-        np.hstack((np.eye(n), np.zeros((n, n))))))
-    def cost(Y):
-        return 0.5*np.linalg.norm(W * ((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2 - C))**2
-    return cost
+# def setup_CPn_cost(D, n):
+#     """Cost using geodesic metric on CPn."""
+#     W = distance_to_weights(D)
+#     C = np.cos(D)**2
+#     i_mtx = np.vstack(
+#         (np.hstack((np.zeros((n, n)), -np.eye(n))),
+#         np.hstack((np.eye(n), np.zeros((n, n))))))
+#     def cost(Y):
+#         return 0.5*np.linalg.norm(W * ((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2 - C))**2
+#     return cost
