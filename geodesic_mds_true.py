@@ -52,7 +52,7 @@ def main_mds(D, dim=3, X=None, space='real'):
     manifold = pymanopt.manifolds.Oblique(dim, n)
     solver = pymanopt.solvers.ConjugateGradient(maxiter=5000)
     if space == 'real':
-        cost, egrad = setup_RPn_cost(D, return_grad=True)
+        cost, egrad = setup_RPn_cost(D)
     elif space == 'complex':
         cost = setup_CPn_cost(D, int(dim/2))
     problem = pymanopt.Problem(manifold=manifold, cost=cost, egrad=egrad)
@@ -69,7 +69,7 @@ def main_mds(D, dim=3, X=None, space='real'):
 # Cost Functions
 ################################################################################
 
-def setup_RPn_cost(D, return_grad=False):
+def setup_RPn_cost(D):
     """Create the cost functions for pymanopt.
 
     The cost function is given by
@@ -92,14 +92,23 @@ def setup_RPn_cost(D, return_grad=False):
 
     """
 
-    W = distance_to_weights(D)
-    C = np.cos(D)
     def cost(Y):
         """Weighted Frobenius norm cost function."""
-        return 0.5*np.linalg.norm(W*(C - np.abs(Y.T@Y)))**2
+        ip = acos_validate(Y.T@Y)
+        return 0.5*np.linalg.norm(D - np.arccos(np.abs(ip)))**2
     def egrad(Y):
         """Derivative of the cost function."""
-        return 2*Y@(W**2 * (np.abs(Y.T@Y) - C) * np.sign(Y.T@Y))
+        # tmp = -1*(np.ones(D.shape) - (Y.T@Y)**2 + np.eye(D.shape[0]))**(-0.5)
+        zero_tol = 1e-12
+        tmp = np.ones(D.shape) - (Y.T@Y)**2
+        idx = np.where(np.abs(tmp) < zero_tol)   # Avoid division by zero.
+        tmp[idx] = 1
+        tmp = -1*tmp**(-0.5)
+        fill_val = np.min(tmp)  # All entries are negative.
+        tmp[idx] = fill_val     # Make non-diagonal zeros large.
+        np.fill_diagonal(tmp, 0)    # Ignore known zeros on diagonal.
+        ip = acos_validate(Y.T@Y)
+        return 2*Y@((np.arccos(np.abs(ip)) - D) * tmp * np.sign(Y.T@Y))
     return cost, egrad
 
 # def setup_CPn_cost(D, n):
