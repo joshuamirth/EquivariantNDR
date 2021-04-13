@@ -100,15 +100,15 @@ def setup_RPn_cost(D):
         """Derivative of the cost function."""
         # tmp = -1*(np.ones(D.shape) - (Y.T@Y)**2 + np.eye(D.shape[0]))**(-0.5)
         zero_tol = 1e-12
-        tmp = np.ones(D.shape) - (Y.T@Y)**2
+        ip = acos_validate(Y.T@Y)
+        tmp = np.ones(D.shape) - (ip)**2
         idx = np.where(np.abs(tmp) < zero_tol)   # Avoid division by zero.
         tmp[idx] = 1
         tmp = -1*tmp**(-0.5)
         fill_val = np.min(tmp)  # All entries are negative.
         tmp[idx] = fill_val     # Make non-diagonal zeros large.
         np.fill_diagonal(tmp, 0)    # Ignore known zeros on diagonal.
-        ip = acos_validate(Y.T@Y)
-        return 2*Y@((np.arccos(np.abs(ip)) - D) * tmp * np.sign(Y.T@Y))
+        return 2*Y@((np.arccos(np.abs(ip)) - D) * tmp * np.sign(ip))
     return cost, egrad
 
 # def setup_CPn_cost(D, n):
