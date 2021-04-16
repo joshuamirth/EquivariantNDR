@@ -21,9 +21,9 @@ def rp_mds(D, dim=2, X=None):
     X_out = main_mds(D, dim=dim+1, X=X, space='real')
     return X_out
 
-# def cp_mds(D, dim=1, X=None):
-    # X_out = main_mds(D, dim=2*dim+2, X=X, space='complex')
-    # return X_out
+def cp_mds(D, dim=1, X=None):
+    X_out = main_mds(D, dim=2*dim+2, X=X, space='complex')
+    return X_out
 
 def main_mds(D, dim=3, X=None, space='real'):
     """MDS via gradient descent with the chordal metric.
@@ -54,7 +54,7 @@ def main_mds(D, dim=3, X=None, space='real'):
     if space == 'real':
         cost, egrad = setup_RPn_cost(D)
     elif space == 'complex':
-        cost = setup_CPn_cost(D, int(dim/2))
+        cost, egrad = setup_CPn_cost(D, int(dim/2))
     problem = pymanopt.Problem(manifold=manifold, cost=cost, egrad=egrad)
     if X is None:
         X_out = solver.solve(problem)
@@ -111,13 +111,12 @@ def setup_RPn_cost(D):
         return 2*Y@((np.arccos(np.abs(ip)) - D) * tmp * np.sign(ip))
     return cost, egrad
 
-# def setup_CPn_cost(D, n):
-#     """Cost using geodesic metric on CPn."""
-#     W = distance_to_weights(D)
-#     C = np.cos(D)**2
-#     i_mtx = np.vstack(
-#         (np.hstack((np.zeros((n, n)), -np.eye(n))),
-#         np.hstack((np.eye(n), np.zeros((n, n))))))
-#     def cost(Y):
-#         return 0.5*np.linalg.norm(W * ((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2 - C))**2
-#     return cost
+def setup_CPn_cost(D, n, return_grad=False):
+    """Cost using geodesic metric on CPn."""
+    W = distance_to_weights(D)
+    i_mtx = np.vstack(
+        (np.hstack((np.zeros((n, n)), -np.eye(n))),
+        np.hstack((np.eye(n), np.zeros((n, n))))))
+    def cost(Y):
+        return 0.5*np.linalg.norm(np.sqrt((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2) - D)**2
+    return cost, None

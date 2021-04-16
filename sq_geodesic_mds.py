@@ -25,15 +25,15 @@ def cp_mds(D, dim=1, X=None):
     X_out = main_mds(D, dim=2*dim+2, X=X, space='complex')
     return X_out
 
-def main_mds(D, dim=3, X=None, space='real'):
+def main_mds(D, dim, X=None, space='real'):
     """MDS via gradient descent with the chordal metric.
 
     Parameters
     ----------
     D : ndarray (n, n)
         Goal distance matrix.
-    dim : int, optional
-        Goal dimension (of ambient Euclidean space). Default is `dim = 3`.
+    dim : int
+        Goal dimension (of ambient Euclidean space).
     X : ndarray (dim, n), optional
         Initial value for gradient descent. `n` points in dimension `dim`. If
         both a dimension and an initial condition are specified, the initial
@@ -56,7 +56,7 @@ def main_mds(D, dim=3, X=None, space='real'):
         # identical, but analytic grad significantly faster.
         cost, egrad = setup_RPn_cost(D, return_grad=True)
     elif space == 'complex':
-        cost = setup_CPn_cost(D, int(dim/2))
+        cost, egrad = setup_CPn_cost(D, int(dim/2), return_grad=False)
     problem = pymanopt.Problem(manifold=manifold, cost=cost, egrad=egrad)
     if X is None:
         X_out = solver.solve(problem)
@@ -107,7 +107,7 @@ def setup_RPn_cost(D, return_grad=False):
         egrad = None
     return cost, egrad
 
-def setup_CPn_cost(D, n):
+def setup_CPn_cost(D, n, return_grad=False):
     """Cost using geodesic metric on CPn."""
     W = distance_to_weights(D)
     C = np.cos(D)**2
@@ -116,4 +116,16 @@ def setup_CPn_cost(D, n):
         np.hstack((np.eye(n), np.zeros((n, n))))))
     def cost(Y):
         return 0.5*np.linalg.norm(W * ((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2 - C))**2
-    return cost
+    if return_grad:
+        def egrad(Y):
+            J = np.vstack(
+                (np.hstack((np.zeros((n, n)), np.eye(n))),
+                np.zeros((n, 2*n))))
+            R = np.vstack(
+                (np.hstack((np.eye(n), np.zeros((n, n)))),
+                np.zeros((n, 2*n))))
+            return (Y @ (2 * (Y.T @ Y)) @ (2 * (W * ((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2 - C)))
+                + (R@Y + J@Y) @ (2 * (Y.T @ J @ Y)) @ (2 * (W * ((Y.T @ Y)**2 + (Y.T @ (i_mtx@Y))**2 - C))))
+    else:
+        egrad = None
+    return cost, egrad
