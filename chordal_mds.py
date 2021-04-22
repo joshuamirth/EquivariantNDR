@@ -11,9 +11,9 @@ import pymanopt
 from pymanopt.manifolds import Oblique
 from pymanopt.solvers import ConjugateGradient
 
-def rp_mds(D, dim=3, X=None):
+def rp_mds(D, dim=2, X=None):
     """Wrapper function."""
-    X_out = main_mds(D, dim=dim, X=X, space='real')
+    X_out = main_mds(D, dim=dim+1, X=X, space='real')
     return X_out
 
 def main_mds(D, dim=3, X=None, space='real'):

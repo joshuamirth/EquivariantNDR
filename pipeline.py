@@ -7,8 +7,9 @@ from ripser import ripser
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import floyd_warshall
 import geometry
+import time
 
-def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
+def geo_distance_matrix(D, epsilon=0.4, k=-1, normalize=True, verbose=False):
     """Approximate a geodesic distance matrix.
 
     Given a distance matrix uses either an epsilon neighborhood or a
@@ -46,14 +47,26 @@ def geo_distance_matrix(D,epsilon=0.4,k=-1,normalize=True):
 
     # Use kNN. Sort twice to get nearest neighbour list.
     if k > 0:
+        if verbose:
+            print('Finding kNN')
+        tic = time.time()
         D_sort = np.argsort(np.argsort(D))
         A = D_sort <= k
         A = (A + A.T)/2
+        toc = time.time()
+        if verbose:
+            print('Time: %g' %(toc-tic))
     # Use epsilon neighborhoods.
     else:
         A = D<epsilon
+    if verbose:
+        print('Computing path-length distances')
+    tic = time.time()
     G = csr_matrix(D*A)                   # Matrix representation of graph
-    Dg = floyd_warshall(G,directed=False)     # Path-length distance matrix
+    Dg = floyd_warshall(G, directed=False)     # Path-length distance matrix
+    toc = time.time()
+    if verbose:
+        print('Time: %g' %(toc - tic))
     if np.isinf(np.max(Dg)):
         raise ValueError('The distance matrix contains infinite values, ' +
             'indicating that the graph is not connected. Try a larger value ' +
@@ -248,11 +261,27 @@ def partition_unity(D, radius, landmarks, bump_type='quadratic'):
         S = S*(radius - U)**2
     elif bump_type == 'triangular':
         S = S*(radius**2 - radius*U)
+    elif bump_type == 'linear':
+        S = S*(radius - U)
     else:
         raise NotImplementedError('This type of bump function not yet '\
             'implemented. Use "quadratic" instead.')
     S = S/np.sum(S, axis=0)
     return S
+
+def convert_cocycle(cocycle, sub_ind):
+    """Change labels in cocycle from index in full dataset to index in landmark subset. This is required when cocycle is computed using the n_perm option for Ripser istead of precomputing the landmarks."""
+
+    new_cocycle = np.zeros(cocycle.shape, dtype=int)
+    j = 0
+    for i in sub_ind:
+        idx = np.where(cocycle[:,0] == i)
+        new_cocycle[idx, 0] = j
+        neg_idx = np.where(cocycle[:,1] == i)
+        new_cocycle[neg_idx, 1] = j
+        j += 1
+    new_cocycle[:,2] = cocycle[:,2]
+    return new_cocycle
 
 def proj_coordinates(partition_function, cocycle):
     """Coordinates of data matrix in real projective space.

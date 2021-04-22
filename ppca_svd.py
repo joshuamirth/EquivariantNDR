@@ -21,7 +21,7 @@ def ppca(X, proj_dim, batch=False, verbose=False, return_basis=False):
         For all N points of the dataset, membership weights to
         d different classes are the coordinates
     proj_dim : integer
-        The dimension of the projective space onto which to project
+        The dimension of the ambient space onto which to project. (Dimension of projective space is proj_dim-1)
     verbose : boolean
         Whether to print information during iterations
     Returns
@@ -52,6 +52,7 @@ def ppca(X, proj_dim, batch=False, verbose=False, return_basis=False):
             U, S, Vt = linalg.svd(Xret, full_matrices=False)
     if verbose:
         print("Elapsed time ppca: %.3g"%(time.time()-tic))
-    if not return_basis:
-        Umat = None
-    return Xret, Umat
+    if return_basis:
+        return Xret, Umat
+    else:
+        return Xret
