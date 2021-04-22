@@ -1,13 +1,16 @@
 """ File to carry out the steps in the EM-coords pipeline before
     dimensionality reduction."""
 
+# General imports.
 import numpy as np
 import numpy.linalg as LA
-from ripser import ripser
-from scipy.sparse import csr_matrix
-from scipy.sparse.csgraph import floyd_warshall
 import geometry
 import time
+
+# For geodesic distance matrix estimation.
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import floyd_warshall
+from sklearn.neighbors import NearestNeighbors
 
 def geo_distance_matrix(D, epsilon=0.4, k=-1, normalize=True, verbose=False):
     """Approximate a geodesic distance matrix.
@@ -26,52 +29,68 @@ def geo_distance_matrix(D, epsilon=0.4, k=-1, normalize=True, verbose=False):
         Radius of neighborhood when constructing graph. Default is ~pi/8.
     k : int, optional
         Number of nearest neighbors in k-NN graph. Default is -1 (i.e.
-        use epsilon neighborhoods).
+        use epsilon neighborhoods). Here `k` includes the point itself.
+    normalize: bool
+        When `True`, distances are normalized to correspond to the original
+        distance matrix, i.e. Dhat is scaled so the maximum distance is no
+        larger than `max(D)`.
 
     Returns
     -------
     Dhat : ndarray
-        Square distance matrix matrix of the graph. Distances are
-        normalized to correspond to RP^n, i.e. Dhat is scaled so the
-        maximum distance is no larger than pi/2.
+        Square distance matrix matrix of the graph. 
 
     Raises
     ------
     ValueError
         If the provided value of epsilon or k is too small, the graph
         may not be connected, giving infinite values in the distance
-        matrix. A value error is raised if this occurs, as the later
-        algorithms do not handle infinite values smoothly.
+        matrix.
+
+    Examples
+    --------
+    The four corners of the unit square.
+    >>> d = np.sqrt(2)
+    >>> D = np.array([[0, 1, d, 1],[1,0,1,d],[d,1,0,1],[1,d,1,0]])
+    >>> G = geo_distance_matrix(D, k=3, normalize=False)
+    [[0. 1. 2. 1.]
+        [1. 0. 1. 2.]
+        [2. 1. 0. 1.]
+        [1. 2. 1. 0.]]    
 
     """
 
     # Use kNN. Sort twice to get nearest neighbour list.
     if k > 0:
         if verbose:
-            print('Finding kNN')
-        tic = time.time()
-        D_sort = np.argsort(np.argsort(D))
-        A = D_sort <= k
-        A = (A + A.T)/2
-        toc = time.time()
+            print('Computing nearest neighbors...')
+            tic = time.time()
+        neigh = NearestNeighbors(n_neighbors=k, metric='precomputed')
+        neigh.fit(D)
+        A_graph = neigh.kneighbors_graph(D, mode='connectivity')
+        A = A_graph.toarray()
         if verbose:
-            print('Time: %g' %(toc-tic))
+            toc = time.time()
+            print('Finished in %g seconds' %(toc - tic))
     # Use epsilon neighborhoods.
     else:
         A = D<epsilon
     if verbose:
-        print('Computing path-length distances')
-    tic = time.time()
+        print('Computing path-length distances...')
+        tic = time.time()
     G = csr_matrix(D*A)                   # Matrix representation of graph
     Dg = floyd_warshall(G, directed=False)     # Path-length distance matrix
-    toc = time.time()
     if verbose:
-        print('Time: %g' %(toc - tic))
+        toc = time.time()
+        print('Finished in %g seconds' %(toc - tic))
     if np.isinf(np.max(Dg)):
         raise ValueError('The distance matrix contains infinite values, ' +
             'indicating that the graph is not connected. Try a larger value ' +
             'of epsilon or k.')
-    Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
+    if normalize:
+        Dhat = (np.max(D)/np.max(Dg))*Dg    # Normalize distances.
+    else:
+        Dhat = Dg
     np.fill_diagonal(Dhat, 0)
     return Dhat
 
