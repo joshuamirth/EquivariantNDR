@@ -214,13 +214,13 @@ def threshold_cocycle(cocycle, D, threshold):
     threshold_cocycle = np.delete(cocycle,bad_rows,0)
     return threshold_cocycle
 
-def partition_unity(D, radius, landmarks, bump_type='quadratic'):
+def partition_unity(D_land, radius, landmarks, bump_type='quadratic'):
     """Partition of unity subordinate to open ball cover.
 
     Parameters
     ----------
-    D : ndarray (n*n)
-        Distance matrix of entire dataset.
+    D_land : ndarray (l*n)
+        Matrix of distances from landmarks to entire dataset.
     radius : float
         Radius of balls to use in open cover of data.
     landmarks : int list (l)
@@ -266,8 +266,8 @@ def partition_unity(D, radius, landmarks, bump_type='quadratic'):
 
     """
 
-    U = D[landmarks,:]
-    S = U < radius
+    # U = D[landmarks,:]
+    S = D_land < radius
     # Radius must be large enough that every point is in one open ball.
     # Thus each column of `U` must contain at least one value less than
     # radius.
@@ -277,11 +277,11 @@ def partition_unity(D, radius, landmarks, bump_type='quadratic'):
             '= %d.' %radius)
     if bump_type == 'quadratic':
         # This is the default given in the paper.
-        S = S*(radius - U)**2
+        S = S*(radius - D_land)**2
     elif bump_type == 'triangular':
-        S = S*(radius**2 - radius*U)
+        S = S*(radius**2 - radius*D_land)
     elif bump_type == 'linear':
-        S = S*(radius - U)
+        S = S*(radius - D_land)
     else:
         raise NotImplementedError('This type of bump function not yet '\
             'implemented. Use "quadratic" instead.')
