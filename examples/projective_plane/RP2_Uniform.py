@@ -51,7 +51,7 @@ plt.show()
 
 # %% codecell
 eta, birth, death = pipeline.prominent_cocycle(PH_sub['cocycles'][1],
-    PH_sub['dgms'][1], threshold_at_death=False)
+    PH_sub['dgms'][1])
 
 # %% codecell
 print(eta)
