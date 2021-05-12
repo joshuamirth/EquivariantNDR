@@ -274,7 +274,7 @@ def partition_unity(D_land, radius, landmarks, bump_type='quadratic'):
     cover_check = np.sum(S, axis=0)
     if np.min(cover_check) < 1:
         raise ValueError('Open sets do not cover data when epsilon '\
-            '= %d.' %radius)
+            '= %2.3f.' %radius)
     if bump_type == 'quadratic':
         # This is the default given in the paper.
         S = S*(radius - D_land)**2
